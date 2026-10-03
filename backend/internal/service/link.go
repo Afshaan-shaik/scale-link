@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 
+	"github.com/scalelink/scalelink/internal/cache"
 	"github.com/scalelink/scalelink/internal/config"
 	"github.com/scalelink/scalelink/internal/model"
 	"github.com/scalelink/scalelink/internal/repository"
@@ -54,6 +55,7 @@ type LinkService struct {
 	cfg         *config.Config
 	linkRepo    *repository.LinkRepository
 	blockRepo   *repository.BlocklistRepository
+	cache       *cache.LinkCache
 	codeLen     int
 
 	// blocklist cache — reloaded on startup and periodically refreshed
@@ -66,11 +68,13 @@ func NewLinkService(
 	cfg *config.Config,
 	linkRepo *repository.LinkRepository,
 	blockRepo *repository.BlocklistRepository,
+	linkCache *cache.LinkCache,
 ) (*LinkService, error) {
 	svc := &LinkService{
 		cfg:       cfg,
 		linkRepo:  linkRepo,
 		blockRepo: blockRepo,
+		cache:     linkCache,
 		codeLen:   cfg.ShortCodeLength,
 	}
 
@@ -141,6 +145,10 @@ func (s *LinkService) Create(ctx context.Context, req CreateLinkRequest) (*Creat
 		return nil, fmt.Errorf("create link: %w", err)
 	}
 
+	if s.cache != nil && isCustom {
+		_ = s.cache.Invalidate(ctx, code)
+	}
+
 	return &CreateLinkResponse{
 		Link:     link,
 		ShortURL: fmt.Sprintf("%s/%s", s.cfg.BaseURL, link.Code),
@@ -166,14 +174,28 @@ func (s *LinkService) Resolve(ctx context.Context, code string) (*model.Link, er
 	return link, nil
 }
 
-// SoftDelete removes a link (owner-only).
+// SoftDelete removes a link (owner-only) and invalidates cache.
 func (s *LinkService) SoftDelete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
-	return s.linkRepo.SoftDelete(ctx, id, userID)
+	code, err := s.linkRepo.SoftDelete(ctx, id, userID)
+	if err != nil {
+		return err
+	}
+	if s.cache != nil && code != "" {
+		_ = s.cache.Invalidate(ctx, code)
+	}
+	return nil
 }
 
-// UpdateExpiry changes the expiry of a link (owner-only).
+// UpdateExpiry changes the expiry of a link (owner-only) and invalidates cache.
 func (s *LinkService) UpdateExpiry(ctx context.Context, id uuid.UUID, userID uuid.UUID, expiresAt *time.Time) error {
-	return s.linkRepo.UpdateExpiry(ctx, id, userID, expiresAt)
+	code, err := s.linkRepo.UpdateExpiry(ctx, id, userID, expiresAt)
+	if err != nil {
+		return err
+	}
+	if s.cache != nil && code != "" {
+		_ = s.cache.Invalidate(ctx, code)
+	}
+	return nil
 }
 
 // ListByUser returns paginated links for a user.

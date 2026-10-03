@@ -17,10 +17,12 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"github.com/scalelink/scalelink/internal/cache"
 	"github.com/scalelink/scalelink/internal/config"
 	"github.com/scalelink/scalelink/internal/db"
 	"github.com/scalelink/scalelink/internal/handler"
 	"github.com/scalelink/scalelink/internal/middleware"
+	"github.com/scalelink/scalelink/internal/ratelimit"
 	"github.com/scalelink/scalelink/internal/repository"
 	"github.com/scalelink/scalelink/internal/service"
 )
@@ -51,7 +53,7 @@ func main() {
 	}
 	defer pool.Close()
 
-	// ── Redis (optional in Phase 1 — health check skips if nil) ──────────────
+	// ── Redis ─────────────────────────────────────────────────────────────────
 	var rdb *redis.Client
 	if cfg.RedisAddr != "" {
 		rdb = redis.NewClient(&redis.Options{
@@ -61,7 +63,7 @@ func main() {
 			MaxRetries: cfg.RedisMaxRetries,
 		})
 		if err := rdb.Ping(context.Background()).Err(); err != nil {
-			log.Warn().Err(err).Msg("redis unavailable — continuing without cache")
+			log.Warn().Err(err).Msg("redis unavailable — continuing with direct DB fallback")
 			rdb = nil
 		} else {
 			log.Info().Str("addr", cfg.RedisAddr).Msg("redis connected")
@@ -69,15 +71,19 @@ func main() {
 		}
 	}
 
+	// ── Cache & Rate Limiter ──────────────────────────────────────────────────
+	linkCache := cache.NewLinkCache(rdb)
+	limiter := ratelimit.NewTokenBucketLimiter(rdb)
+
 	// ── Repositories ──────────────────────────────────────────────────────────
-	linkRepo     := repository.NewLinkRepository(pool)
-	userRepo     := repository.NewUserRepository(pool)
-	keyRepo      := repository.NewAPIKeyRepository(pool)
-	blockRepo    := repository.NewBlocklistRepository(pool)
-	statsRepo    := repository.NewStatsRepository(pool)
+	linkRepo  := repository.NewLinkRepository(pool)
+	userRepo  := repository.NewUserRepository(pool)
+	keyRepo   := repository.NewAPIKeyRepository(pool)
+	blockRepo := repository.NewBlocklistRepository(pool)
+	statsRepo := repository.NewStatsRepository(pool)
 
 	// ── Services ──────────────────────────────────────────────────────────────
-	linkSvc, err := service.NewLinkService(cfg, linkRepo, blockRepo)
+	linkSvc, err := service.NewLinkService(cfg, linkRepo, blockRepo, linkCache)
 	if err != nil {
 		log.Fatal().Err(err).Msg("init link service")
 	}
@@ -85,7 +91,7 @@ func main() {
 	statsSvc := service.NewStatsService(statsRepo)
 
 	// ── Handlers ──────────────────────────────────────────────────────────────
-	linkH   := handler.NewLinkHandler(linkSvc, statsSvc, cfg.RedirectStatusCode)
+	linkH   := handler.NewLinkHandler(linkSvc, statsSvc, linkCache, cfg.RedirectStatusCode, cfg.CacheLinkTTL, cfg.CacheNegativeTTL)
 	authH   := handler.NewAuthHandler(authSvc)
 	keyH    := handler.NewAPIKeyHandler(authSvc)
 	healthH := handler.NewHealthHandler(pool, rdb)
@@ -120,9 +126,11 @@ func main() {
 		r.With(middleware.AuthRequired(authSvc)).Get("/me", authH.Me)
 	})
 
-	// Links — creation is optionally authenticated (anonymous links allowed)
+	// Links — creation is rate-limited and optionally authenticated
 	r.Route("/api/links", func(r chi.Router) {
-		r.With(middleware.OptionalAuth(authSvc)).Post("/", linkH.CreateLink)
+		r.With(middleware.RateLimit(limiter, "create", cfg.RateLimitCreatePerMin)).
+			With(middleware.OptionalAuth(authSvc)).
+			Post("/", linkH.CreateLink)
 
 		// Authenticated link management
 		r.Group(func(r chi.Router) {
@@ -138,14 +146,15 @@ func main() {
 	// API Keys
 	r.Route("/api/keys", func(r chi.Router) {
 		r.Use(middleware.AuthRequired(authSvc))
-		r.Post("/",       keyH.CreateKey)
+		r.With(middleware.RateLimit(limiter, "create_key", cfg.RateLimitAPIKeyPerMin)).
+			Post("/", keyH.CreateKey)
 		r.Get("/",        keyH.ListKeys)
 		r.Delete("/{id}", keyH.RevokeKey)
 	})
 
-	// ── Short-link redirect — must come last to avoid swallowing API routes ──
-	// The {code} pattern only matches if the path doesn't start with /api or /health
-	r.Get("/{code}", linkH.Redirect)
+	// ── Short-link redirect — hot path with rate limit ────────────────────────
+	r.With(middleware.RateLimit(limiter, "redirect", cfg.RateLimitRedirectPerMin)).
+		Get("/{code}", linkH.Redirect)
 
 	// ── Server ────────────────────────────────────────────────────────────────
 	srv := &http.Server{

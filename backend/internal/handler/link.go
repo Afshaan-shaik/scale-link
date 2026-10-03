@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	"github.com/scalelink/scalelink/internal/cache"
 	"github.com/scalelink/scalelink/internal/middleware"
 	"github.com/scalelink/scalelink/internal/model"
 	"github.com/scalelink/scalelink/internal/repository"
@@ -19,17 +20,30 @@ import (
 
 // LinkHandler handles all link-related HTTP endpoints.
 type LinkHandler struct {
-	linkSvc    *service.LinkService
-	statsSvc   *service.StatsService
+	linkSvc      *service.LinkService
+	statsSvc     *service.StatsService
+	cache        *cache.LinkCache
 	redirectCode int
+	linkTTL      time.Duration
+	negativeTTL  time.Duration
 }
 
-// NewLinkHandler creates a new LinkHandler.
-func NewLinkHandler(linkSvc *service.LinkService, statsSvc *service.StatsService, redirectCode int) *LinkHandler {
+// NewLinkHandler creates a new LinkHandler with cache support.
+func NewLinkHandler(
+	linkSvc *service.LinkService,
+	statsSvc *service.StatsService,
+	linkCache *cache.LinkCache,
+	redirectCode int,
+	linkTTL time.Duration,
+	negativeTTL time.Duration,
+) *LinkHandler {
 	return &LinkHandler{
 		linkSvc:      linkSvc,
 		statsSvc:     statsSvc,
+		cache:        linkCache,
 		redirectCode: redirectCode,
+		linkTTL:      linkTTL,
+		negativeTTL:  negativeTTL,
 	}
 }
 
@@ -135,18 +149,45 @@ func (h *LinkHandler) CreateLink(w http.ResponseWriter, r *http.Request) {
 
 // ── GET /{code} ───────────────────────────────────────────────────────────────
 
-// Redirect handles GET /{code} — the hot path.
-// In Phase 1: DB-only. Phase 2 adds Redis cache-aside.
+// Redirect handles GET /{code} — the hot path with cache-aside and negative caching.
 func (h *LinkHandler) Redirect(w http.ResponseWriter, r *http.Request) {
 	code := chi.URLParam(r, "code")
 	logger := zerolog.Ctx(r.Context())
 
+	// 1. Check Redis cache first (Cache-Aside)
+	if h.cache != nil {
+		longURL, isNegative, err := h.cache.GetLink(r.Context(), code)
+		if err == nil {
+			if isNegative {
+				w.Header().Set("X-Cache", "HIT")
+				w.Header().Set("X-Served-By", "redis-negative")
+				respondError(w, http.StatusNotFound, fmt.Sprintf("short code %q not found", code))
+				return
+			}
+			w.Header().Set("X-Cache", "HIT")
+			w.Header().Set("X-Served-By", "redis")
+			http.Redirect(w, r, longURL, h.redirectCode)
+			return
+		}
+	}
+
+	// 2. Cache MISS: Query database
 	link, err := h.linkSvc.Resolve(r.Context(), code)
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrNotFound):
+			if h.cache != nil {
+				_ = h.cache.SetNegative(r.Context(), code, h.negativeTTL)
+			}
+			w.Header().Set("X-Cache", "MISS")
+			w.Header().Set("X-Served-By", "db")
 			respondError(w, http.StatusNotFound, fmt.Sprintf("short code %q not found", code))
 		case errors.Is(err, service.ErrExpired):
+			if h.cache != nil {
+				_ = h.cache.Invalidate(r.Context(), code)
+			}
+			w.Header().Set("X-Cache", "MISS")
+			w.Header().Set("X-Served-By", "db")
 			respondError(w, http.StatusGone, "this link has expired")
 		default:
 			logger.Error().Err(err).Str("code", code).Msg("redirect failed")
@@ -155,10 +196,13 @@ func (h *LinkHandler) Redirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Add observability headers (Phase 2 will add X-Cache: HIT|MISS)
+	// 3. Populate Redis Cache for active link
+	if h.cache != nil {
+		_ = h.cache.SetLink(r.Context(), code, link.LongURL, h.linkTTL)
+	}
+
 	w.Header().Set("X-Cache", "MISS")
 	w.Header().Set("X-Served-By", "db")
-
 	http.Redirect(w, r, link.LongURL, h.redirectCode)
 }
 

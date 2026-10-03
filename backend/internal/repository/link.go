@@ -145,35 +145,39 @@ func (r *LinkRepository) ListByUser(ctx context.Context, userID uuid.UUID, limit
 
 // UpdateExpiry allows changing the expiry time of a link.
 // Returns ErrNotFound if the link doesn't belong to the user.
-func (r *LinkRepository) UpdateExpiry(ctx context.Context, id uuid.UUID, userID uuid.UUID, expiresAt *time.Time) error {
+func (r *LinkRepository) UpdateExpiry(ctx context.Context, id uuid.UUID, userID uuid.UUID, expiresAt *time.Time) (string, error) {
 	query := `
 		UPDATE links SET expires_at = $1, updated_at = NOW()
-		WHERE id = $2 AND user_id = $3 AND deleted_at IS NULL`
+		WHERE id = $2 AND user_id = $3 AND deleted_at IS NULL
+		RETURNING code`
 
-	tag, err := r.pool.Exec(ctx, query, expiresAt, id, userID)
+	var code string
+	err := r.pool.QueryRow(ctx, query, expiresAt, id, userID).Scan(&code)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
 	if err != nil {
-		return fmt.Errorf("update expiry: %w", err)
+		return "", fmt.Errorf("update expiry: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return code, nil
 }
 
-// SoftDelete marks a link as deleted.
-func (r *LinkRepository) SoftDelete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
+// SoftDelete marks a link as deleted and returns its short code.
+func (r *LinkRepository) SoftDelete(ctx context.Context, id uuid.UUID, userID uuid.UUID) (string, error) {
 	query := `
 		UPDATE links SET deleted_at = NOW(), updated_at = NOW()
-		WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`
+		WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+		RETURNING code`
 
-	tag, err := r.pool.Exec(ctx, query, id, userID)
+	var code string
+	err := r.pool.QueryRow(ctx, query, id, userID).Scan(&code)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
 	if err != nil {
-		return fmt.Errorf("soft delete link: %w", err)
+		return "", fmt.Errorf("soft delete link: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return code, nil
 }
 
 // IncrementClickCount atomically increments a link's click counter.

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/scalelink/scalelink/internal/model"
@@ -148,6 +149,47 @@ func (r *StatsRepository) InsertClickEvents(ctx context.Context, events []*model
 		if _, err := results.Exec(); err != nil {
 			return fmt.Errorf("insert click event %d: %w", i, err)
 		}
+	}
+	return nil
+}
+
+// RecordClickBatch atomically inserts click events and increments links.click_count in a single transaction.
+func (r *StatsRepository) RecordClickBatch(ctx context.Context, events []*model.ClickEvent, codeCounts map[string]int64) error {
+	if len(events) == 0 && len(codeCounts) == 0 {
+		return nil
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin click batch tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	b := &pgx.Batch{}
+	for _, ev := range events {
+		b.Queue(`
+			INSERT INTO click_events (id, code, timestamp, ip, country, device_type, referrer, user_agent)
+			VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6, $7)`,
+			ev.Code, ev.Timestamp, ev.IP, ev.Country, ev.DeviceType, ev.Referrer, ev.UserAgent,
+		)
+	}
+
+	for code, count := range codeCounts {
+		b.Queue(`UPDATE links SET click_count = click_count + $1 WHERE code = $2`, count, code)
+	}
+
+	results := tx.SendBatch(ctx, b)
+	totalQueued := len(events) + len(codeCounts)
+	for i := 0; i < totalQueued; i++ {
+		if _, err := results.Exec(); err != nil {
+			results.Close()
+			return fmt.Errorf("batch item %d: %w", i, err)
+		}
+	}
+	results.Close()
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit click batch tx: %w", err)
 	}
 	return nil
 }

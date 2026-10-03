@@ -10,11 +10,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	"github.com/scalelink/scalelink/internal/analytics"
 	"github.com/scalelink/scalelink/internal/cache"
 	"github.com/scalelink/scalelink/internal/middleware"
 	"github.com/scalelink/scalelink/internal/model"
 	"github.com/scalelink/scalelink/internal/repository"
 	"github.com/scalelink/scalelink/internal/service"
+	"github.com/scalelink/scalelink/internal/stream"
 	"github.com/scalelink/scalelink/internal/validator"
 )
 
@@ -23,16 +25,18 @@ type LinkHandler struct {
 	linkSvc      *service.LinkService
 	statsSvc     *service.StatsService
 	cache        *cache.LinkCache
+	producer     *stream.Producer
 	redirectCode int
 	linkTTL      time.Duration
 	negativeTTL  time.Duration
 }
 
-// NewLinkHandler creates a new LinkHandler with cache support.
+// NewLinkHandler creates a new LinkHandler with cache and stream support.
 func NewLinkHandler(
 	linkSvc *service.LinkService,
 	statsSvc *service.StatsService,
 	linkCache *cache.LinkCache,
+	producer *stream.Producer,
 	redirectCode int,
 	linkTTL time.Duration,
 	negativeTTL time.Duration,
@@ -41,6 +45,7 @@ func NewLinkHandler(
 		linkSvc:      linkSvc,
 		statsSvc:     statsSvc,
 		cache:        linkCache,
+		producer:     producer,
 		redirectCode: redirectCode,
 		linkTTL:      linkTTL,
 		negativeTTL:  negativeTTL,
@@ -166,6 +171,7 @@ func (h *LinkHandler) Redirect(w http.ResponseWriter, r *http.Request) {
 			}
 			w.Header().Set("X-Cache", "HIT")
 			w.Header().Set("X-Served-By", "redis")
+			h.publishClick(r, code)
 			http.Redirect(w, r, longURL, h.redirectCode)
 			return
 		}
@@ -203,7 +209,28 @@ func (h *LinkHandler) Redirect(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("X-Cache", "MISS")
 	w.Header().Set("X-Served-By", "db")
+	h.publishClick(r, code)
 	http.Redirect(w, r, link.LongURL, h.redirectCode)
+}
+
+func (h *LinkHandler) publishClick(r *http.Request, code string) {
+	if h.producer == nil {
+		return
+	}
+	ip := r.RemoteAddr
+	if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
+		ip = realIP
+	}
+	ev := &model.ClickEvent{
+		Code:       code,
+		Timestamp:  time.Now().UTC(),
+		IP:         ip,
+		Country:    analytics.ParseCountry(r),
+		DeviceType: analytics.ParseDeviceType(r.UserAgent()),
+		Referrer:   r.Referer(),
+		UserAgent:  r.UserAgent(),
+	}
+	h.producer.PublishAsync(ev)
 }
 
 // ── GET /api/links ────────────────────────────────────────────────────────────
@@ -394,16 +421,9 @@ func (h *LinkHandler) DeleteLink(w http.ResponseWriter, r *http.Request) {
 
 // GetStats handles GET /api/links/{code}/stats
 func (h *LinkHandler) GetStats(w http.ResponseWriter, r *http.Request) {
-	claims, ok := middleware.ClaimsFromContext(r.Context())
-	if !ok {
-		respondError(w, http.StatusUnauthorized, "authentication required")
-		return
-	}
-	userID, _ := uuid.Parse(claims.UserID)
-
 	code := chi.URLParam(r, "code")
 
-	// Verify ownership
+	// Verify link exists
 	link, err := h.linkSvc.GetByCode(r.Context(), code)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
@@ -413,15 +433,34 @@ func (h *LinkHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "failed to get link")
 		return
 	}
-	if link.UserID == nil || *link.UserID != userID {
-		respondError(w, http.StatusForbidden, "access denied")
-		return
+
+	// If link has an owner, require authentication and verify ownership
+	if link.UserID != nil {
+		claims, ok := middleware.ClaimsFromContext(r.Context())
+		if !ok {
+			respondError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+		userID, err := uuid.Parse(claims.UserID)
+		if err != nil || *link.UserID != userID {
+			respondError(w, http.StatusForbidden, "access denied")
+			return
+		}
 	}
 
-	// Date range defaults: last 30 days
+	// Date range defaults: last 30 days up to end of today
 	q := r.URL.Query()
 	from := parseDate(q.Get("from"), time.Now().AddDate(0, 0, -30))
-	to := parseDate(q.Get("to"), time.Now())
+	var to time.Time
+	if toStr := q.Get("to"); toStr != "" {
+		if parsed, err := time.Parse("2006-01-02", toStr); err == nil {
+			to = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, time.UTC)
+		} else {
+			to = time.Now().Add(time.Hour)
+		}
+	} else {
+		to = time.Now().Add(time.Hour)
+	}
 
 	stats, err := h.statsSvc.GetStats(r.Context(), code, from, to)
 	if err != nil {

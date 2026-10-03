@@ -25,6 +25,7 @@ import (
 	"github.com/scalelink/scalelink/internal/ratelimit"
 	"github.com/scalelink/scalelink/internal/repository"
 	"github.com/scalelink/scalelink/internal/service"
+	"github.com/scalelink/scalelink/internal/stream"
 )
 
 func main() {
@@ -71,9 +72,10 @@ func main() {
 		}
 	}
 
-	// ── Cache & Rate Limiter ──────────────────────────────────────────────────
+	// ── Cache, Rate Limiter & Streams Producer ────────────────────────────────
 	linkCache := cache.NewLinkCache(rdb)
 	limiter := ratelimit.NewTokenBucketLimiter(rdb)
+	streamProducer := stream.NewProducer(rdb, cfg.StreamClickEvents)
 
 	// ── Repositories ──────────────────────────────────────────────────────────
 	linkRepo  := repository.NewLinkRepository(pool)
@@ -91,7 +93,7 @@ func main() {
 	statsSvc := service.NewStatsService(statsRepo)
 
 	// ── Handlers ──────────────────────────────────────────────────────────────
-	linkH   := handler.NewLinkHandler(linkSvc, statsSvc, linkCache, cfg.RedirectStatusCode, cfg.CacheLinkTTL, cfg.CacheNegativeTTL)
+	linkH   := handler.NewLinkHandler(linkSvc, statsSvc, linkCache, streamProducer, cfg.RedirectStatusCode, cfg.CacheLinkTTL, cfg.CacheNegativeTTL)
 	authH   := handler.NewAuthHandler(authSvc)
 	keyH    := handler.NewAPIKeyHandler(authSvc)
 	healthH := handler.NewHealthHandler(pool, rdb)
@@ -132,14 +134,17 @@ func main() {
 			With(middleware.OptionalAuth(authSvc)).
 			Post("/", linkH.CreateLink)
 
+		// Public/OptionalAuth stats (anonymous links accessible, owned links require owner auth)
+		r.With(middleware.OptionalAuth(authSvc)).
+			Get("/{code}/stats", linkH.GetStats)
+
 		// Authenticated link management
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.AuthRequired(authSvc))
-			r.Get("/",             linkH.ListLinks)
-			r.Get("/{code}",       linkH.GetLink)
-			r.Patch("/{id}",       linkH.UpdateLink)
-			r.Delete("/{id}",      linkH.DeleteLink)
-			r.Get("/{code}/stats", linkH.GetStats)
+			r.Get("/",        linkH.ListLinks)
+			r.Get("/{code}",  linkH.GetLink)
+			r.Patch("/{id}",  linkH.UpdateLink)
+			r.Delete("/{id}", linkH.DeleteLink)
 		})
 	})
 

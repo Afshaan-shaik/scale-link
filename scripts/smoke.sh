@@ -44,16 +44,37 @@ else
 fi
 
 # 4. Check cache hit on second request
-echo -n "[4/6] Verifying cache hit on second request... "
+echo -n "[4/7] Verifying cache hit on second request... "
 HEADER_2=$(curl -s -I "$BASE_URL/$CODE")
 if echo "$HEADER_2" | grep -q -i "X-Cache: HIT"; then
   echo "PASS (X-Cache: HIT received)"
 else
-  echo "INFO: X-Cache header was: $(echo "$HEADER_2" | grep -i X-Cache || echo 'none (Phase 1 DB-only)')"
+  echo "FAIL: Expected X-Cache: HIT, got: $(echo "$HEADER_2" | grep -i X-Cache)"
+  exit 1
 fi
 
-# 5. Check expired link returns 410
-echo -n "[5/6] Verifying expired link returns 410 Gone... "
+# 5. Check async click analytics in /stats
+echo -n "[5/7] Verifying click recorded in /stats within 10s... "
+CLICK_FOUND=0
+for i in {1..10}; do
+  STATS_RESP=$(curl -s "$BASE_URL/api/links/$CODE/stats")
+  TOTAL=$(echo "$STATS_RESP" | grep -o '"total":[0-9]*' | cut -d':' -f2)
+  if [ -n "$TOTAL" ] && [ "$TOTAL" -ge 1 ]; then
+    CLICK_FOUND=1
+    break
+  fi
+  sleep 1
+done
+
+if [ "$CLICK_FOUND" -eq 1 ]; then
+  echo "PASS (Async analytics recorded total clicks: $TOTAL)"
+else
+  echo "FAIL: Expected click in /stats, got: $STATS_RESP"
+  exit 1
+fi
+
+# 6. Check expired link returns 410
+echo -n "[6/7] Verifying expired link returns 410 Gone... "
 EXP_ALIAS="exp-$RAND_SUFFIX"
 PAST_TIME=$(date -u -d "1 hour ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v-1H +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "2020-01-01T00:00:00Z")
 
@@ -69,8 +90,8 @@ else
   exit 1
 fi
 
-# 6. Verify Rate Limiter returns 429
-echo -n "[6/6] Verifying rate limit / abuse protection... "
+# 7. Verify Rate Limiter returns 429
+echo -n "[7/7] Verifying rate limit / abuse protection... "
 # Rapid-fire 30 requests to trigger rate limit if configured
 BLOCKED=0
 for i in {1..35}; do

@@ -106,6 +106,18 @@ flowchart TD
     Worker -.->|Poison Pill / Retries| Redis
 ```
 
+### 3.1 Redis Streams & Async Analytics Worker Details
+- **Non-Blocking Ingestion:** The redirect handler publishes click events to the Redis stream `clicks:events` using `PublishAsync` in a detached goroutine. Redirect responses return to the caller in $<2\text{ms}$ without waiting for disk or stream persistence.
+- **Consumer Group Semantics:** Worker instances join the `click_workers` consumer group. Redis distributes messages across active worker processes with delivery tracking in the Pending Entries List (PEL).
+- **At-Least-Once Delivery & Crash Resilience:**
+  - Messages are read via `XREADGROUP` with `>` ID for new events.
+  - Workers execute batch inserts of raw events (`click_events`) and counter increments (`links.click_count`) inside a single atomic PostgreSQL transaction.
+  - Workers only issue `XACK` **after** the PostgreSQL transaction successfully commits.
+  - If a worker crashes or is abruptly killed (`SIGKILL`) mid-run, pending messages remain in the PEL. Upon restart or during periodic background sweeps, workers utilize `XAUTOCLAIM` (with a minimum idle threshold of 1s) to reclaim and process unacknowledged messages without event loss.
+- **Poison-Pill & Dead-Letter Stream (DLQ):**
+  - Messages with malformed payloads or messages exceeding `WORKER_MAX_RETRIES` (3 delivery attempts as tracked by `XPENDING`) are automatically routed to the dead-letter stream `clicks:dead_letter` with metadata (`_dlq_reason`, `_dlq_timestamp`, `_dlq_original_id`).
+  - The original message is then acknowledged (`XACK`) on `clicks:events` to prevent unbounded consumer stalls.
+
 ---
 
 ## 4. Short Code Generation: Trade-Off Analysis

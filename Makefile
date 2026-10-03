@@ -33,6 +33,10 @@ smoke: ## Run automated end-to-end verification tests
 	@echo "==> Running automated smoke test suite..."
 	@bash scripts/smoke.sh || powershell -ExecutionPolicy Bypass -File scripts/smoke.ps1
 
+verify-phase3: ## Verify Phase 3 async worker with 1,000 events and zero loss
+	@echo "==> Running Phase 3 async worker verification..."
+	@bash scripts/verify_phase3.sh || powershell -ExecutionPolicy Bypass -File scripts/verify_phase3.ps1
+
 test: ## Run unit and integration tests inside backend
 	@echo "==> Running backend unit tests..."
 	@if command -v go >/dev/null 2>&1; then \

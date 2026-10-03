@@ -92,8 +92,8 @@ services:
   # ── Nginx Reverse Proxy / Load Balancer ───────────────────────────────────────
   nginx:
     build:
-      context: ./nginx
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: nginx/Dockerfile
     container_name: scalelink-nginx
     restart: unless-stopped
     ports:

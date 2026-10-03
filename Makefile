@@ -1,0 +1,59 @@
+# ── ScaleLink Makefile ────────────────────────────────────────────────────────
+.PHONY: help up down restart build logs test lint loadtest smoke seed clean
+
+SHELL := /bin/bash
+COMPOSE := docker compose
+
+help: ## Show this help message
+	@echo "ScaleLink Development Commands:"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}'
+
+up: ## Start all services with docker compose
+	$(COMPOSE) up -d --build
+
+down: ## Stop all services
+	$(COMPOSE) down
+
+restart: down up ## Restart all services
+
+build: ## Rebuild all docker images
+	$(COMPOSE) build
+
+logs: ## Tail all container logs
+	$(COMPOSE) logs -f
+
+ps: ## List running containers
+	$(COMPOSE) ps
+
+seed: ## Seed database with demo user, sample links, and click analytics
+	@echo "==> Running ScaleLink Seed script..."
+	$(COMPOSE) run --rm api /seed
+
+smoke: ## Run automated end-to-end verification tests
+	@echo "==> Running automated smoke test suite..."
+	@bash scripts/smoke.sh || powershell -ExecutionPolicy Bypass -File scripts/smoke.ps1
+
+test: ## Run unit and integration tests inside backend
+	@echo "==> Running backend unit tests..."
+	@if command -v go >/dev/null 2>&1; then \
+		cd backend && go test -v -race ./... ; \
+	else \
+		$(COMPOSE) run --rm api go test -v ./... ; \
+	fi
+
+lint: ## Run go vet and code format checks
+	@echo "==> Running linting..."
+	@if command -v go >/dev/null 2>&1; then \
+		cd backend && go vet ./... ; \
+	else \
+		$(COMPOSE) run --rm api go vet ./... ; \
+	fi
+
+loadtest: ## Run k6 load test scripts
+	@echo "==> Running k6 load test..."
+	@if [ -d "loadtest" ]; then \
+		docker run --rm -i --network=host grafana/k6 run - < loadtest/redirect.js || true ; \
+	fi
+
+clean: ## Remove containers, volumes, and temporary build files
+	$(COMPOSE) down -v --remove-orphans

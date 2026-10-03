@@ -1,0 +1,36 @@
+# Binaries
+backend/bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+backend/vendor/
+*.test
+*.out
+
+# Environment
+.env
+
+# Docker volumes
+postgres_data/
+redis_data/
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.backup
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp

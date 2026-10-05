@@ -1,0 +1,24 @@
+# AWS Region & Environment
+aws_region  = "us-east-1"
+environment = "production"
+project_name = "scalelink"
+
+# High-Availability API Tasks
+api_replica_count = 3
+container_cpu     = "512"
+container_memory  = "1024"
+
+# Managed PostgreSQL 16
+db_instance_class = "db.t4g.micro"
+db_name           = "scalelink"
+db_username       = "scalelink_admin"
+db_password       = "ReplaceWithStrongRandomPassword456!"
+
+# Managed Redis 7
+redis_node_type   = "cache.t4g.micro"
+
+# Container Registry Image
+ecr_image_api     = "123456789012.dkr.ecr.us-east-1.amazonaws.com/scalelink-api"
+
+# Optional Custom Domain for HTTPS (e.g. "go.yourdomain.com")
+domain_name       = ""

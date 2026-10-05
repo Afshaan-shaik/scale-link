@@ -1,6 +1,7 @@
 # Binaries
 backend/bin/
 *.exe
+*.exe~
 *.dll
 *.so
 *.dylib

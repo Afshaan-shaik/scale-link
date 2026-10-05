@@ -286,7 +286,7 @@ scalelink_ratelimit_rejections_total{action="create"} 4
     .container { max-width: 1200px; margin: 24px auto; padding: 0 20px; }
     .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; margin-bottom: 24px; }
     h2 { font-size: 18px; color: #f0f6fc; margin-top: 0; border-bottom: 1px solid #30363d; padding-bottom: 12px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    table { width: 100%%; border-collapse: collapse; margin-top: 12px; }
     th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid #21262d; font-size: 14px; }
     th { color: #8b949e; background: #0d1117; }
     .badge-up { background: #238636; color: #ffffff; padding: 3px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }

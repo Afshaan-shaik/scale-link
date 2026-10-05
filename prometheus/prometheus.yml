@@ -1,0 +1,27 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  # ── ScaleLink API Cluster (Load-Balanced Across 3 Instances) ───────────────
+  - job_name: "scalelink-api"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["api1:8080", "api2:8080", "api3:8080"]
+        labels:
+          service: "scalelink-api"
+          cluster: "production"
+
+  # ── ScaleLink Async Click Worker ──────────────────────────────────────────
+  - job_name: "scalelink-worker"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["worker:8082"]
+        labels:
+          service: "scalelink-worker"
+          cluster: "production"
+
+  # ── Prometheus Self-Monitoring ────────────────────────────────────────────
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

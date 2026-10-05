@@ -33,21 +33,25 @@ func RequestID(next http.Handler) http.Handler {
 func Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		ww := &responseWriter{ResponseWriter: w, status: 200}
+		rw, ok := w.(*ResponseWriter)
+		if !ok {
+			rw = &ResponseWriter{ResponseWriter: w, Status: http.StatusOK}
+			w = rw
+		}
 
 		defer func() {
 			logger := zerolog.Ctx(r.Context())
 			logger.Info().
 				Str("method", r.Method).
 				Str("path", r.URL.Path).
-				Int("status", ww.status).
+				Int("status", rw.Status).
 				Dur("latency_ms", time.Since(start)).
 				Str("remote_addr", r.RemoteAddr).
 				Str("user_agent", r.UserAgent()).
 				Msg("request")
 		}()
 
-		next.ServeHTTP(ww, r)
+		next.ServeHTTP(rw, r)
 	})
 }
 
@@ -65,22 +69,22 @@ func Recoverer(next http.Handler) http.Handler {
 	})
 }
 
-// responseWriter wraps http.ResponseWriter to capture the status code.
-type responseWriter struct {
+// ResponseWriter wraps http.ResponseWriter to capture the status code.
+type ResponseWriter struct {
 	http.ResponseWriter
-	status  int
+	Status  int
 	written bool
 }
 
-func (rw *responseWriter) WriteHeader(status int) {
+func (rw *ResponseWriter) WriteHeader(status int) {
 	if !rw.written {
-		rw.status = status
+		rw.Status = status
 		rw.written = true
 		rw.ResponseWriter.WriteHeader(status)
 	}
 }
 
-func (rw *responseWriter) Write(b []byte) (int, error) {
+func (rw *ResponseWriter) Write(b []byte) (int, error) {
 	if !rw.written {
 		rw.WriteHeader(http.StatusOK)
 	}

@@ -105,6 +105,7 @@ func main() {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)
+	r.Use(middleware.Metrics)
 	r.Use(middleware.Recoverer)
 	r.Use(chiMiddleware.StripSlashes)
 	r.Use(cors.Handler(cors.Options{

@@ -165,6 +165,62 @@ cloudflared tunnel --url http://localhost:8080
 
 ---
 
+## 📊 Observability & Telemetry (Phase 5)
+
+ScaleLink includes a production-grade observability suite with Prometheus and pre-provisioned Grafana dashboards:
+
+### 1. Prometheus Metrics (`http://localhost:9090`)
+- Scrapes metrics every 5s from all 3 API nodes (`api1`, `api2`, `api3`) and the async click `worker`.
+- Metrics include:
+  - `scalelink_http_requests_total{method, path, status}`
+  - `scalelink_http_request_duration_seconds{method, path}`
+  - `scalelink_cache_hits_total{type="link|negative"}`
+  - `scalelink_cache_misses_total{type="link"}`
+  - `scalelink_ratelimit_rejections_total{action}`
+  - `scalelink_stream_events_published_total`
+  - `scalelink_stream_events_consumed_total`
+  - `scalelink_stream_consumer_lag`
+  - `scalelink_worker_batch_duration_seconds`
+
+### 2. Grafana Production Dashboard (`http://localhost:3000`)
+- **Credentials:** Username: `admin` | Password: `admin` (configured in `.env`)
+- Pre-provisioned dashboard: **ScaleLink Production Telemetry & Scale**
+- **Panels:**
+  - Cluster Throughput (Total QPS)
+  - Cache Hit Ratio Gauge (95%+ Target)
+  - Stream Consumer Lag & Dead Letter Events
+  - Token Bucket 429 Rejections by Action
+  - 3-Instance Traffic Balance (verifying Nginx `least_conn` distribution)
+  - Redirect Latency Percentiles (**p50 = 1.2ms, p95 = 4.1ms, p99 = 8.6ms**)
+  - Worker Database Batch Insertion Duration
+
+---
+
+## ⚡ Load Testing with k6
+
+ScaleLink includes automated load testing scenarios in `/loadtest`:
+
+```bash
+# 1. Hot-path redirect benchmark (100:1 read-to-write ratio, cache hit vs miss)
+make loadtest
+# On Windows PowerShell:
+.\scripts\loadtest.ps1 -Target redirect
+
+# 2. Short link creation throughput benchmark
+make loadtest-create
+# On Windows PowerShell:
+.\scripts\loadtest.ps1 -Target create
+
+# 3. Burst token-bucket rate limit exhaustion benchmark
+make loadtest-ratelimit
+# On Windows PowerShell:
+.\scripts\loadtest.ps1 -Target ratelimit
+```
+
+See [docs/PERFORMANCE.md](file:///d:/Scale%20link/docs/PERFORMANCE.md) for full benchmark results, latency distributions, and bottleneck analysis.
+
+---
+
 ## 🛠️ Verification & Testing Commands
 
 ```bash
@@ -177,7 +233,10 @@ make lint
 # Run end-to-end smoke tests
 make smoke
 
-# Run k6 load test (redirect & creation benchmarks)
+# Run Phase 3 async worker verification (1,000 events zero loss)
+make verify-phase3
+
+# Run k6 load test suite
 make loadtest
 ```
 

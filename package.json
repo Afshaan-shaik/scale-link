@@ -1,0 +1,13 @@
+{
+  "name": "scalelink",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ScaleLink — High-Scale Production URL Shortener with Async Click Analytics",
+  "scripts": {
+    "start": "npm run dev --prefix frontend",
+    "dev": "npm run dev --prefix frontend",
+    "build": "npm run build --prefix frontend",
+    "test": "cd backend && go test -v ./...",
+    "smoke": "bash scripts/smoke.sh || powershell -ExecutionPolicy Bypass -File scripts/smoke.ps1"
+  }
+}

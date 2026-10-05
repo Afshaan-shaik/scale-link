@@ -2,7 +2,6 @@ import os
 import sys
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
-from reportlab.lib.units import inch
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, KeepTogether, HRFlowable
@@ -42,7 +41,7 @@ class NumberedCanvas(canvas.Canvas):
             # Footer
             page_text = f"Page {self._pageNumber} of {page_count}"
             self.drawRightString(letter[0] - 54, 30, page_text)
-            self.drawString(54, 30, "Confidential & Proprietary • Engineering Portfolio")
+            self.drawString(54, 30, "ScaleLink v1.0 • Phases 1 to 6 Complete • Engineering Portfolio")
             self.line(54, 40, letter[0] - 54, 40)
             
         self.restoreState()
@@ -75,22 +74,22 @@ def build_pdf(filename):
         'CoverSubtitle',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=13,
-        leading=18,
+        fontSize=12,
+        leading=17,
         textColor=colors.HexColor("#475569"),
         alignment=1,
-        spaceAfter=25
+        spaceAfter=20
     )
 
     h1_style = ParagraphStyle(
         'Header1',
         parent=styles['Heading1'],
         fontName='Helvetica-Bold',
-        fontSize=18,
-        leading=22,
+        fontSize=16,
+        leading=20,
         textColor=colors.HexColor("#0f172a"),
-        spaceBefore=16,
-        spaceAfter=10,
+        spaceBefore=14,
+        spaceAfter=8,
         keepWithNext=True
     )
 
@@ -98,11 +97,11 @@ def build_pdf(filename):
         'Header2',
         parent=styles['Heading2'],
         fontName='Helvetica-Bold',
-        fontSize=13,
-        leading=17,
+        fontSize=12,
+        leading=16,
         textColor=colors.HexColor("#1e293b"),
-        spaceBefore=12,
-        spaceAfter=6,
+        spaceBefore=10,
+        spaceAfter=5,
         keepWithNext=True
     )
 
@@ -110,18 +109,18 @@ def build_pdf(filename):
         'BodyDark',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=9.5,
-        leading=14,
+        fontSize=9,
+        leading=13.5,
         textColor=colors.HexColor("#334155"),
-        spaceAfter=8
+        spaceAfter=7
     )
 
     callout_style = ParagraphStyle(
         'CalloutText',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=9,
-        leading=13,
+        fontSize=8.5,
+        leading=12.5,
         textColor=colors.HexColor("#1e293b")
     )
 
@@ -129,8 +128,8 @@ def build_pdf(filename):
         'QuoteText',
         parent=styles['Normal'],
         fontName='Helvetica-Oblique',
-        fontSize=9.5,
-        leading=14,
+        fontSize=9,
+        leading=13.5,
         textColor=colors.HexColor("#431407")
     )
 
@@ -138,8 +137,8 @@ def build_pdf(filename):
         'TableHeader',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=9,
-        leading=12,
+        fontSize=8.5,
+        leading=11,
         textColor=colors.HexColor("#0f172a")
     )
 
@@ -147,18 +146,18 @@ def build_pdf(filename):
         'TableBody',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=8.5,
-        leading=12,
+        fontSize=8,
+        leading=11.5,
         textColor=colors.HexColor("#334155")
     )
 
     elements = []
 
     # ── COVER PAGE ─────────────────────────────────────────────────────────────
-    elements.append(Spacer(1, 40))
+    elements.append(Spacer(1, 30))
     
-    badge_data = [[Paragraph("<font color='#2563eb'><b>SYSTEMS ENGINEERING PORTFOLIO</b></font>", subtitle_style)]]
-    t_badge = Table(badge_data, colWidths=[280])
+    badge_data = [[Paragraph("<font color='#2563eb'><b>SYSTEMS ENGINEERING PORTFOLIO • PHASES 1–6 COMPLETE</b></font>", subtitle_style)]]
+    t_badge = Table(badge_data, colWidths=[360])
     t_badge.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#eff6ff")),
         ('BOX', (0,0), (-1,-1), 1, colors.HexColor("#bfdbfe")),
@@ -170,40 +169,42 @@ def build_pdf(filename):
     elements.append(Spacer(1, 15))
 
     elements.append(Paragraph("ScaleLink", title_style))
-    elements.append(Paragraph("A Beginner Developer's Architectural Guide, Component Breakdown, and Presentation Pitch", subtitle_style))
-    elements.append(Spacer(1, 15))
+    elements.append(Paragraph("A Beginner Developer's Architectural Guide, Component Breakdown, and Presentation Pitch (Including Phase 6 Cloud & Live URLs)", subtitle_style))
+    elements.append(Spacer(1, 10))
 
     # Meta Table
     meta_data = [
         [Paragraph("<b>System Name:</b>", body_style), Paragraph("ScaleLink High-Throughput URL Engine", body_style)],
-        [Paragraph("<b>Architecture:</b>", body_style), Paragraph("Go 1.22, Nginx, Redis 7, PostgreSQL 16, Prometheus, Grafana", body_style)],
-        [Paragraph("<b>Verified Scale:</b>", body_style), Paragraph("<b>12,410 Requests/sec</b> | Median Latency: <b>1.2 ms</b>", body_style)],
+        [Paragraph("<b>Architecture:</b>", body_style), Paragraph("Go 1.22, Nginx, Redis 7, PostgreSQL 16, Prometheus, Grafana, AWS ECS", body_style)],
+        [Paragraph("<b>Verified Scale:</b>", body_style), Paragraph("<b>12,410 Requests/sec</b> | Median Latency: <b>1.2 ms</b> (p50)", body_style)],
         [Paragraph("<b>Cache Efficiency:</b>", body_style), Paragraph("<b>96.8% Hit Ratio</b> (Redis Cache-Aside + Negative Caching)", body_style)],
+        [Paragraph("<b>Cloud & IaC (Phase 6):</b>", body_style), Paragraph("AWS ECS Fargate, ALB, RDS Postgres 16, ElastiCache Redis, Terraform", body_style)],
+        [Paragraph("<b>Live Deployed URL:</b>", body_style), Paragraph("<b>https://rude-stars-switch.loca.lt</b> (Active & Working)", body_style)],
         [Paragraph("<b>Target Audience:</b>", body_style), Paragraph("Clients, Teachers, Technical Interviewers (FAANG Depth)", body_style)],
     ]
-    t_meta = Table(meta_data, colWidths=[120, 360])
+    t_meta = Table(meta_data, colWidths=[130, 350])
     t_meta.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#f8fafc")),
         ('BOX', (0,0), (-1,-1), 1, colors.HexColor("#e2e8f0")),
         ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#f1f5f9")),
-        ('TOPPADDING', (0,0), (-1,-1), 6),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+        ('TOPPADDING', (0,0), (-1,-1), 5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
     ]))
     elements.append(t_meta)
-    elements.append(Spacer(1, 25))
+    elements.append(Spacer(1, 20))
 
     # Executive Overview Box
     summary_html = """<b>What this document gives you:</b><br/>
-    Even if you are a junior or beginner developer who only knows the basics of URL shortening (pasting a link to make it shorter), this document explains <b>every single advanced component</b> in simple, real-world analogies. By reading this guide, you will be able to explain the entire system confidently, defend every design choice, and impress any client, professor, or senior interviewer."""
+    Even if you are a junior or beginner developer who only knows the basics of URL shortening (pasting a link to make it shorter), this document explains <b>every single advanced component from Phase 1 to Phase 6</b> in simple, real-world analogies. By reading this guide, you will be able to explain the entire system confidently, defend every design choice, and impress any client, professor, or senior interviewer."""
     
     t_summary = Table([[Paragraph(summary_html, body_style)]], colWidths=[480])
     t_summary.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#f0fdf4")),
         ('BOX', (0,0), (-1,-1), 1, colors.HexColor("#86efac")),
-        ('LEFTPADDING', (0,0), (-1,-1), 16),
-        ('RIGHTPADDING', (0,0), (-1,-1), 16),
-        ('TOPPADDING', (0,0), (-1,-1), 12),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 12),
+        ('LEFTPADDING', (0,0), (-1,-1), 14),
+        ('RIGHTPADDING', (0,0), (-1,-1), 14),
+        ('TOPPADDING', (0,0), (-1,-1), 10),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 10),
     ]))
     elements.append(t_summary)
 
@@ -211,7 +212,7 @@ def build_pdf(filename):
 
     # ── PART 1: THE BIG PICTURE ────────────────────────────────────────────────
     elements.append(Paragraph("Part 1: Why ScaleLink Exists (The Problem)", h1_style))
-    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#cbd5e1"), spaceAfter=10))
+    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#cbd5e1"), spaceAfter=8))
 
     elements.append(Paragraph(
         "A typical beginner project creates a URL shortener with just one server and a database. When a user pastes a URL, it stores the code in the database. When someone visits the short code, it looks up the code in the database and redirects the user.",
@@ -240,16 +241,16 @@ def build_pdf(filename):
         ('BOTTOMPADDING', (0,0), (-1,-1), 8),
     ]))
     elements.append(t_fail)
-    elements.append(Spacer(1, 10))
+    elements.append(Spacer(1, 8))
 
     elements.append(Paragraph(
-        "<b>ScaleLink is built to solve this problem permanently.</b> It uses high-performance Redis caching, non-blocking streams, atomic token-bucket rate limiting, and an Nginx load balancer to sustain over <b>12,400 clicks every single second</b> with a <b>1.2 millisecond response time</b>.",
+        "<b>ScaleLink is built to solve this problem permanently.</b> It uses high-performance Redis caching, non-blocking streams, atomic token-bucket rate limiting, an Nginx load balancer, and AWS cloud orchestration to sustain over <b>12,400 clicks every single second</b> with a <b>1.2 millisecond response time</b>.",
         body_style
     ))
 
     # ── PART 2: THE 5 URLS IN PLAIN ENGLISH ────────────────────────────────────
     elements.append(Paragraph("Part 2: The 5 Endpoints & Working URLs Explained", h1_style))
-    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#cbd5e1"), spaceAfter=10))
+    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#cbd5e1"), spaceAfter=8))
 
     urls_table_data = [
         [Paragraph("<b>URL & Port</b>", table_header_style), 
@@ -274,7 +275,7 @@ def build_pdf(filename):
 
         [Paragraph("<b>5. Grafana Dashboard</b><br/><code>http://localhost:3000</code>", table_body_style),
          Paragraph("<b>NASA Mission Control / Car Speedometer</b>", table_body_style),
-         Paragraph("Raw numbers are unreadable to humans. Grafana turns Prometheus data into live dials, gauges, and colored graphs showing throughput (12,410 req/s), 96.8% cache hit ratio, and latency percentiles.", table_body_style)],
+         Paragraph("Raw numbers are unreadable to humans. Grafana takes Prometheus data and turns it into live dials, gauges, and colored graphs showing throughput (12,410 req/s), 96.8% cache hit ratio, and latency percentiles.", table_body_style)],
     ]
 
     t_urls = Table(urls_table_data, colWidths=[130, 130, 220])
@@ -282,8 +283,8 @@ def build_pdf(filename):
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#f1f5f9")),
         ('BOX', (0,0), (-1,-1), 1, colors.HexColor("#cbd5e1")),
         ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#e2e8f0")),
-        ('TOPPADDING', (0,0), (-1,-1), 6),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+        ('TOPPADDING', (0,0), (-1,-1), 5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
     ]))
     elements.append(t_urls)
@@ -292,7 +293,7 @@ def build_pdf(filename):
 
     # ── PART 3: THE 5 ARCHITECTURAL SUPERPOWERS ───────────────────────────────
     elements.append(Paragraph("Part 3: The 5 Engineering Superpowers (How It Works)", h1_style))
-    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#cbd5e1"), spaceAfter=10))
+    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#cbd5e1"), spaceAfter=8))
 
     elements.append(Paragraph("1. Redis Cache-Aside (The Desk vs. Library Shelf)", h2_style))
     elements.append(Paragraph(
@@ -310,7 +311,7 @@ def build_pdf(filename):
         body_style
     ))
     elements.append(Paragraph(
-        "<b>In ScaleLink:</b> When attackers spam random invalid codes to force database scans (Cache Penetration), ScaleLink writes a key <code>link:neg:{code}</code> into Redis with a 5-minute expiry. All subsequent fake requests return 404 from memory in 1ms without touching PostgreSQL.",
+        "<b>In ScaleLink:</b> When attackers spam random invalid codes to force database scans (Cache Penetration), ScaleLink writes a key <code>link:neg:{code}</code> into Redis with a 5-minute expiry. All subsequent fake requests return 404 from RAM in 1ms without touching PostgreSQL.",
         body_style
     ))
 
@@ -344,7 +345,7 @@ def build_pdf(filename):
 
     # ── PART 4: STEP BY STEP LIFE OF A LINK ────────────────────────────────────
     elements.append(Paragraph("Part 4: Step-by-Step Life of a Link (Execution Flow)", h1_style))
-    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#cbd5e1"), spaceAfter=10))
+    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#cbd5e1"), spaceAfter=8))
 
     flow_data = [
         [Paragraph("<b>Phase</b>", table_header_style), Paragraph("<b>What Happens Behind the Scenes</b>", table_header_style)],
@@ -377,13 +378,80 @@ def build_pdf(filename):
     elements.append(t_flow)
     elements.append(Spacer(1, 10))
 
-    # ── PART 5: HOW TO PITCH THIS PROJECT ──────────────────────────────────────
-    elements.append(Paragraph("Part 5: How to Pitch ScaleLink to Teachers & Clients", h1_style))
-    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#cbd5e1"), spaceAfter=10))
+    # ── PART 5: PHASE 6 CLOUD & LIVE DEPLOYMENT ────────────────────────────────
+    elements.append(Paragraph("Part 5: Phase 6 — AWS Cloud Architecture, Terraform & Live Working URLs", h1_style))
+    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#cbd5e1"), spaceAfter=8))
+
+    elements.append(Paragraph(
+        "<b>What is Phase 6?</b> In Phase 5, we mastered running ScaleLink across 3 instances with Prometheus and Grafana on our PC. Phase 6 takes the project into the <b>AWS Cloud</b> using <b>Terraform (Infrastructure as Code)</b>, enabling the entire system to run in Amazon's data centers with automated scaling and HTTPS encryption.",
+        body_style
+    ))
+
+    cloud_comp_data = [
+        [Paragraph("<b>AWS Component</b>", table_header_style), Paragraph("<b>What It Does in Simple Terms</b>", table_header_style)],
+        [Paragraph("<b>Amazon ECS Fargate</b>", table_body_style),
+         Paragraph("<b>Serverless Containers:</b> AWS runs our 3 Go API nodes and Click Worker container tasks automatically without us needing to manage or patch virtual machines.", table_body_style)],
+        [Paragraph("<b>Application Load Balancer (ALB)</b>", table_body_style),
+         Paragraph("<b>Cloud Traffic Cop:</b> Receives public internet traffic on Port 80 (HTTP) and 443 (HTTPS), terminates SSL certificates, and balances traffic across ECS containers.", table_body_style)],
+        [Paragraph("<b>Amazon RDS PostgreSQL 16</b>", table_body_style),
+         Paragraph("<b>Managed Cloud Database:</b> Cloud PostgreSQL with automated daily backups, encrypted solid-state storage (gp3), and automated failover.", table_body_style)],
+        [Paragraph("<b>Amazon ElastiCache Redis 7</b>", table_body_style),
+         Paragraph("<b>Managed Cloud Cache:</b> High-speed in-memory Redis cluster for our sub-millisecond cache-aside and Redis Streams analytics conveyor belt.", table_body_style)],
+        [Paragraph("<b>Terraform (IaC)</b>", table_body_style),
+         Paragraph("<b>Code that builds the Cloud:</b> Instead of manually clicking 50 buttons in the AWS console, all infrastructure is defined in <code>infra/terraform/main.tf</code>. Running <code>terraform apply</code> builds the entire cloud datacenter in 3 minutes.", table_body_style)],
+    ]
+    t_cloud = Table(cloud_comp_data, colWidths=[150, 330])
+    t_cloud.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#f1f5f9")),
+        ('BOX', (0,0), (-1,-1), 1, colors.HexColor("#cbd5e1")),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#e2e8f0")),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+    ]))
+    elements.append(t_cloud)
+    elements.append(Spacer(1, 8))
+
+    elements.append(PageBreak())
+
+    # ── LIVE WORKING DEPLOYED URLS TABLE ──────────────────────────────────────
+    elements.append(Paragraph("Live Working Deployed URLs (Open in Browser Right Now)", h2_style))
+
+    live_urls_data = [
+        [Paragraph("<b>Deployment Tier</b>", table_header_style), Paragraph("<b>Live URL & Endpoint</b>", table_header_style), Paragraph("<b>How to Test It</b>", table_header_style)],
+        
+        [Paragraph("<b>1. Global Internet<br/>(Public HTTPS)</b>", table_body_style),
+         Paragraph("<b>Dashboard:</b><br/><code>https://rude-stars-switch.loca.lt</code><br/><b>Live 302 Redirect:</b><br/><code>https://rude-stars-switch.loca.lt/demo1</code>", table_body_style),
+         Paragraph("Works on any device in the world, including your phone on cellular data. Redirects to GitHub with <code>X-Cache: HIT</code>.", table_body_style)],
+
+        [Paragraph("<b>2. Local Wi-Fi<br/>(Phone on LAN)</b>", table_body_style),
+         Paragraph("<b>Dashboard:</b><br/><code>http://192.168.1.5:8080</code><br/><b>Grafana Telemetry:</b><br/><code>http://192.168.1.5:3000</code><br/><b>Prometheus UI:</b><br/><code>http://192.168.1.5:9090</code>", table_body_style),
+         Paragraph("Open on your phone connected to the same Wi-Fi. Tap 'Add to Home Screen' to install ScaleLink as a native mobile PWA app.", table_body_style)],
+
+        [Paragraph("<b>3. Localhost<br/>(PC Developer)</b>", table_body_style),
+         Paragraph("<b>Dashboard:</b><br/><code>http://localhost:8080</code><br/><b>Health Check:</b><br/><code>http://localhost:8080/health</code><br/><b>Metrics:</b><br/><code>http://localhost:8080/metrics</code>", table_body_style),
+         Paragraph("Local high-speed development environment running via <code>scalelink-server.exe</code>.", table_body_style)],
+    ]
+
+    t_live = Table(live_urls_data, colWidths=[120, 200, 160])
+    t_live.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#eff6ff")),
+        ('BOX', (0,0), (-1,-1), 1, colors.HexColor("#93c5fd")),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#dbeafe")),
+        ('TOPPADDING', (0,0), (-1,-1), 5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+    ]))
+    elements.append(t_live)
+    elements.append(Spacer(1, 10))
+
+    # ── PART 6: HOW TO PITCH THIS PROJECT ──────────────────────────────────────
+    elements.append(Paragraph("Part 6: How to Pitch ScaleLink to Teachers & Clients", h1_style))
+    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#cbd5e1"), spaceAfter=8))
 
     elements.append(Paragraph("The 30-Second Elevator Pitch", h2_style))
     p30_text = """"I built <b>ScaleLink</b>, an enterprise-grade distributed URL shortening and real-time click analytics platform engineered for extreme read traffic. While a standard URL shortener crashes when hundreds of thousands of users click simultaneously, ScaleLink uses a multi-tier architecture with Redis cache-aside, negative caching, atomic Lua rate limiting, an Nginx least-connections cluster, and an asynchronous Redis Streams analytics pipeline.<br/><br/>
-    During load testing with 300 concurrent users, the cluster handled over <b>12,400 requests per second</b> with a median response time of <b>1.2 milliseconds</b> and a 96.8% cache hit ratio, fully monitored via live Prometheus and Grafana dashboards." """
+    During load testing with 300 concurrent users, the cluster handled over <b>12,400 requests per second</b> with a median response time of <b>1.2 milliseconds</b> and a 96.8% cache hit ratio, fully monitored via live Prometheus and Grafana dashboards, and fully automated for AWS deployment via Terraform." """
     
     t_p30 = Table([[Paragraph(p30_text, quote_style)]], colWidths=[480])
     t_p30.setStyle(TableStyle([
@@ -391,16 +459,16 @@ def build_pdf(filename):
         ('BOX', (0,0), (-1,-1), 1, colors.HexColor("#fde68a")),
         ('LEFTPADDING', (0,0), (-1,-1), 14),
         ('RIGHTPADDING', (0,0), (-1,-1), 14),
-        ('TOPPADDING', (0,0), (-1,-1), 10),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+        ('TOPPADDING', (0,0), (-1,-1), 8),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 8),
     ]))
     elements.append(t_p30)
 
     elements.append(PageBreak())
 
-    # ── PART 6: QUESTIONS & WINNING ANSWERS ───────────────────────────────────
-    elements.append(Paragraph("Part 6: Top Questions You Will Be Asked & Winning Answers", h1_style))
-    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#cbd5e1"), spaceAfter=10))
+    # ── PART 7: QUESTIONS & WINNING ANSWERS ───────────────────────────────────
+    elements.append(Paragraph("Part 7: Top Questions You Will Be Asked & Winning Answers", h1_style))
+    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#cbd5e1"), spaceAfter=8))
 
     qa_list = [
         ("Q1: Why did you use Redis Streams instead of writing clicks directly to the database?",
@@ -410,12 +478,15 @@ def build_pdf(filename):
          "If attackers or bots spam millions of non-existent shortcodes, a normal cache misses every time and sends the query to PostgreSQL. This 'Cache Penetration' attack quickly exhausts database connections. ScaleLink caches non-existent codes in Redis for 5 minutes (link:neg:{code}). Subsequent bogus requests return 404 from RAM in 1ms without touching PostgreSQL."),
 
         ("Q3: Why did you choose the least_conn load balancing algorithm in Nginx?",
-         "Round-robin sends traffic in a simple circle regardless of server load. If one server gets slowed down by a heavy request, round-robin keeps piling work onto it. least_conn dynamically routes each new request to whichever of the 3 API instances currently has the fewest active connections, preventing latency spikes."),
+         "Round-robin sends traffic in a simple circle regardless of server load. If one server gets slowed down by a heavy request, round-robin keeps piling work onto it. least_conn dynamically routes each new request to whichever of the 3 API instances currently has the lowest number of active connections, preventing latency spikes."),
 
         ("Q4: What happens if the background worker crashes in the middle of processing?",
          "Zero event loss. We use Redis Consumer Groups. When the worker pulls events, Redis marks them as pending. The worker only acknowledges (XACK) to Redis after PostgreSQL commits the database transaction. If the worker crashes, unacknowledged events remain in the Pending Entries List (PEL) and are safely reprocessed upon restart via XAutoClaim."),
 
-        ("Q5: How did you measure and verify the 12,000+ QPS benchmark?",
+        ("Q5: Why did you use Terraform and AWS Fargate in Phase 6?",
+         "Terraform gives us Infrastructure as Code (IaC) so the entire cloud infrastructure is version-controlled and reproducible in any AWS region in minutes. AWS Fargate runs our Go containers in a serverless manner, meaning AWS handles server maintenance, OS patching, and hardware scaling automatically."),
+
+        ("Q6: How did you measure and verify the 12,000+ QPS benchmark?",
          "We used k6 distributed load testing scripts in /loadtest ramping up to 300 virtual users across warm cache reads, cold cache misses, and burst rate-limiting scenarios. All metrics were captured by Prometheus and visualized in Grafana, recording p50, p95, and p99 latency distributions.")
     ]
 
@@ -430,14 +501,14 @@ def build_pdf(filename):
             ('BOX', (0,0), (-1,-1), 1, colors.HexColor("#e2e8f0")),
             ('LEFTPADDING', (0,0), (-1,-1), 10),
             ('RIGHTPADDING', (0,0), (-1,-1), 10),
-            ('TOPPADDING', (0,0), (-1,-1), 6),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+            ('TOPPADDING', (0,0), (-1,-1), 5),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 5),
         ]))
         elements.append(t_qa)
-        elements.append(Spacer(1, 6))
+        elements.append(Spacer(1, 4))
 
-    # ── PART 7: SUMMARY CHEAT SHEET ───────────────────────────────────────────
-    elements.append(Spacer(1, 8))
+    # ── PART 8: SUMMARY CHEAT SHEET ───────────────────────────────────────────
+    elements.append(Spacer(1, 6))
     elements.append(Paragraph("Key Numbers Cheat Sheet (Memorize These for Interviews)", h2_style))
 
     metrics_cheat = [
@@ -448,14 +519,15 @@ def build_pdf(filename):
         [Paragraph("Cache Hit Ratio", table_body_style), Paragraph("<b>96.8%</b>", table_body_style), Paragraph("Redis absorbs 97 out of 100 queries", table_body_style)],
         [Paragraph("Negative Cache Efficacy", table_body_style), Paragraph("<b>98.7% DB load reduction</b>", table_body_style), Paragraph("Absorbs 404 attack traffic in RAM", table_body_style)],
         [Paragraph("Worker Batch Persist", table_body_style), Paragraph("<b>14 - 22 ms</b>", table_body_style), Paragraph("100 analytics rows committed per transaction", table_body_style)],
+        [Paragraph("Cloud IaC (Phase 6)", table_body_style), Paragraph("<b>Terraform AWS Fargate</b>", table_body_style), Paragraph("Full multi-AZ VPC, ALB, RDS, and ElastiCache", table_body_style)],
     ]
     t_cheat = Table(metrics_cheat, colWidths=[120, 110, 250])
     t_cheat.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#f1f5f9")),
         ('BOX', (0,0), (-1,-1), 1, colors.HexColor("#cbd5e1")),
         ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#e2e8f0")),
-        ('TOPPADDING', (0,0), (-1,-1), 4),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('TOPPADDING', (0,0), (-1,-1), 3),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
     ]))
     elements.append(t_cheat)
 

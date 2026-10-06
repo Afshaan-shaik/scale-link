@@ -31,9 +31,27 @@
       }
     },
     {
-      "source": "/(.*)",
+      "source": "/assets/(.*)",
       "destination": {
         "service": "frontend"
+      }
+    },
+    {
+      "source": "/(favicon\\.ico|manifest\\.json|logo\\.svg|robots\\.txt)",
+      "destination": {
+        "service": "frontend"
+      }
+    },
+    {
+      "source": "/",
+      "destination": {
+        "service": "frontend"
+      }
+    },
+    {
+      "source": "/:code",
+      "destination": {
+        "service": "backend"
       }
     }
   ]

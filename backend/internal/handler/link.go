@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -187,6 +188,10 @@ func (h *LinkHandler) Redirect(w http.ResponseWriter, r *http.Request) {
 			}
 			w.Header().Set("X-Cache", "MISS")
 			w.Header().Set("X-Served-By", "db")
+			if strings.Contains(r.Header.Get("Accept"), "text/html") {
+				http.Redirect(w, r, "/?error=not_found&code="+code, http.StatusFound)
+				return
+			}
 			respondError(w, http.StatusNotFound, fmt.Sprintf("short code %q not found", code))
 		case errors.Is(err, service.ErrExpired):
 			if h.cache != nil {
@@ -194,6 +199,10 @@ func (h *LinkHandler) Redirect(w http.ResponseWriter, r *http.Request) {
 			}
 			w.Header().Set("X-Cache", "MISS")
 			w.Header().Set("X-Served-By", "db")
+			if strings.Contains(r.Header.Get("Accept"), "text/html") {
+				http.Redirect(w, r, "/?error=expired&code="+code, http.StatusFound)
+				return
+			}
 			respondError(w, http.StatusGone, "this link has expired")
 		default:
 			logger.Error().Err(err).Str("code", code).Msg("redirect failed")

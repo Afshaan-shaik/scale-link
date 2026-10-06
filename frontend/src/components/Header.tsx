@@ -6,7 +6,8 @@ import {
   Server, 
   Zap, 
   ListFilter,
-  ShieldCheck
+  ShieldCheck,
+  Activity
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -22,8 +23,14 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, linksCo
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'ratelimit', label: 'Token Bucket', icon: Zap },
     { id: 'keys', label: 'API Keys', icon: Key },
-    { id: 'system', label: 'System Architecture', icon: Server },
+    { id: 'system', label: 'System', icon: Server },
+    { id: 'observability', label: 'Observability', icon: Activity },
   ];
+
+  const productionHost =
+    typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+      ? window.location.hostname
+      : 'localhost:8080';
 
   return (
     <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-50">
@@ -79,7 +86,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, linksCo
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
-              <span className="text-slate-300 font-mono">localhost:8080</span>
+              <span className="text-slate-300 font-mono">{productionHost}</span>
             </div>
           </div>
         </div>

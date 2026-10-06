@@ -7,6 +7,7 @@ import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { TokenBucketMeter } from './components/TokenBucketMeter';
 import { ApiKeysManager } from './components/ApiKeysManager';
 import { SystemHealth } from './components/SystemHealth';
+import { ObservabilityDashboard } from './components/ObservabilityDashboard';
 import { 
   Link, 
   LinkStats, 
@@ -339,6 +340,12 @@ const DashboardApp: React.FC = () => {
         {activeTab === 'system' && (
           <div className="animate-fadeIn">
             <SystemHealth />
+          </div>
+        )}
+
+        {activeTab === 'observability' && (
+          <div className="animate-fadeIn">
+            <ObservabilityDashboard />
           </div>
         )}
       </main>

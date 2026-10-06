@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -72,8 +73,8 @@ type Config struct {
 // Load reads configuration from environment variables with sensible defaults.
 func Load() (*Config, error) {
 	cfg := &Config{
-		BaseURL:            getEnv("BASE_URL", "http://localhost:8080"),
-		ServerPort:         getEnv("SERVER_PORT", "8080"),
+		BaseURL:            getBaseURL(),
+		ServerPort:         getEnv("PORT", getEnv("SERVER_PORT", "8080")),
 		ServerReadTimeout:  getDuration("SERVER_READ_TIMEOUT", 10*time.Second),
 		ServerWriteTimeout: getDuration("SERVER_WRITE_TIMEOUT", 10*time.Second),
 		ServerIdleTimeout:  getDuration("SERVER_IDLE_TIMEOUT", 120*time.Second),
@@ -121,10 +122,61 @@ func Load() (*Config, error) {
 		SeedUserPassword: getEnv("SEED_USER_PASSWORD", "Demo1234!"),
 	}
 
+	// ── Support cloud connection strings (Neon, Supabase, Vercel Postgres) ────
+	if dbURL := getEnv("DATABASE_URL", getEnv("POSTGRES_URL", "")); dbURL != "" {
+		if parsed, err := url.Parse(dbURL); err == nil {
+			if h := parsed.Hostname(); h != "" {
+				cfg.PostgresHost = h
+			}
+			if p := parsed.Port(); p != "" {
+				cfg.PostgresPort = p
+			}
+			if parsed.User != nil {
+				cfg.PostgresUser = parsed.User.Username()
+				if pass, ok := parsed.User.Password(); ok {
+					cfg.PostgresPassword = pass
+				}
+			}
+			if path := strings.TrimPrefix(parsed.Path, "/"); path != "" {
+				cfg.PostgresDB = path
+			}
+			if q := parsed.Query().Get("sslmode"); q != "" {
+				cfg.PostgresSSLMode = q
+			}
+		}
+	}
+
+	// ── Support cloud Redis URLs (Upstash, Redis Cloud) ───────────────────────
+	if redisURL := getEnv("REDIS_URL", ""); redisURL != "" {
+		if parsed, err := url.Parse(redisURL); err == nil {
+			if parsed.Host != "" {
+				cfg.RedisAddr = parsed.Host
+			}
+			if parsed.User != nil {
+				if pass, ok := parsed.User.Password(); ok {
+					cfg.RedisPassword = pass
+				}
+			}
+		}
+	}
+
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+func getBaseURL() string {
+	if b := os.Getenv("BASE_URL"); b != "" {
+		return b
+	}
+	if v := os.Getenv("VERCEL_URL"); v != "" {
+		if !strings.HasPrefix(v, "http://") && !strings.HasPrefix(v, "https://") {
+			return "https://" + v
+		}
+		return v
+	}
+	return "http://localhost:8080"
 }
 
 func (c *Config) validate() error {

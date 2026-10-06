@@ -37,11 +37,15 @@ func (h *HealthHandler) Health(w http.ResponseWriter, r *http.Request) {
 	overall := "ok"
 
 	// Postgres readiness
-	if err := h.db.Ping(ctx); err != nil {
-		checks["postgres"] = "unhealthy: " + err.Error()
-		overall = "degraded"
+	if h.db != nil {
+		if err := h.db.Ping(ctx); err != nil {
+			checks["postgres"] = "unhealthy: " + err.Error()
+			overall = "degraded"
+		} else {
+			checks["postgres"] = "ok"
+		}
 	} else {
-		checks["postgres"] = "ok"
+		checks["postgres"] = "standalone / memory mode"
 	}
 
 	// Redis readiness (if configured)

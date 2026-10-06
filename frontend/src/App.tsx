@@ -52,25 +52,61 @@ const RedirectHandler: React.FC<{ code: string }> = ({ code }) => {
   const [linkInfo, setLinkInfo] = useState<Link | null>(null);
 
   useEffect(() => {
-    // Record click analytics and get target URL
+    // 1. Check local storage first (instant synchronous lookup)
     const result = recordLinkClick(code);
 
     if (result.expired && result.link) {
       setLinkInfo(result.link);
       setStatus('expired');
-    } else if (result.redirected && result.link) {
+      return;
+    }
+
+    if (result.redirected && result.link) {
       setLinkInfo(result.link);
       setTargetUrl(result.link.long_url);
       setStatus('redirecting');
+
+      // Sync click to backend asynchronously
+      fetch(`/api/links?code=${encodeURIComponent(code)}&click=true`).catch(() => {});
 
       // Forward browser to the destination URL
       const timer = setTimeout(() => {
         window.location.replace(result.link!.long_url);
       }, 400);
       return () => clearTimeout(timer);
-    } else {
-      setStatus('not_found');
     }
+
+    // 2. Fallback to server API if not in local storage (e.g. new tab, incognito, or other device)
+    fetch(`/api/links?code=${encodeURIComponent(code)}&click=true`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && data.link) {
+          const l: Link = data.link;
+          setLinkInfo(l);
+          if (l.expires_at && new Date() > new Date(l.expires_at)) {
+            setStatus('expired');
+          } else {
+            setTargetUrl(l.long_url);
+            setStatus('redirecting');
+
+            // Persist to local inventory for instant access
+            const current = loadStoredLinks();
+            if (!current.find((item) => item.code === l.code)) {
+              saveStoredLinks([l, ...current]);
+            }
+
+            const timer = setTimeout(() => {
+              window.location.replace(l.long_url);
+            }, 400);
+            return () => clearTimeout(timer);
+          }
+        } else {
+          setStatus('not_found');
+        }
+      })
+      .catch(() => {
+        setStatus('not_found');
+      });
   }, [code]);
 
   if (status === 'redirecting') {

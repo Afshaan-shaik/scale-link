@@ -56,48 +56,17 @@ export interface HealthStatus {
   cache_hit_ratio?: number;
 }
 
-// Initial mock seed matching the backend cmd/seed/main.go
+// Clean seed data: exactly 1 high-scale example link for first-time visitors
 export const INITIAL_LINKS: Link[] = [
   {
     id: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
     code: "gh-repo",
-    short_url: `${window.location.origin}/gh-repo`,
-    long_url: "https://github.com/scalelink/scalelink",
+    short_url: `${typeof window !== 'undefined' ? window.location.origin : 'https://scale-link-six.vercel.app'}/gh-repo`,
+    long_url: "https://github.com/Afshaan-shaik/scale-link",
     click_count: 842,
     created_at: new Date(Date.now() - 5 * 86400000).toISOString(),
     is_custom: true,
     is_expired: false,
-  },
-  {
-    id: "1c2deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6e",
-    code: "go-doc",
-    short_url: `${window.location.origin}/go-doc`,
-    long_url: "https://go.dev/doc/effective_go",
-    click_count: 319,
-    created_at: new Date(Date.now() - 3 * 86400000).toISOString(),
-    is_custom: true,
-    is_expired: false,
-  },
-  {
-    id: "2d3deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6f",
-    code: "arch-post",
-    short_url: `${window.location.origin}/arch-post`,
-    long_url: "https://highscalability.com",
-    click_count: 154,
-    created_at: new Date(Date.now() - 1 * 86400000).toISOString(),
-    is_custom: true,
-    is_expired: false,
-  },
-  {
-    id: "3e4deb4d-3b7d-4bad-9bdd-2b0d7b3dcb70",
-    code: "expired-demo",
-    short_url: `${window.location.origin}/expired-demo`,
-    long_url: "https://example.com/old-page",
-    click_count: 42,
-    expires_at: new Date(Date.now() - 2 * 3600000).toISOString(),
-    created_at: new Date(Date.now() - 7 * 86400000).toISOString(),
-    is_custom: true,
-    is_expired: true,
   },
 ];
 
@@ -106,20 +75,19 @@ export const INITIAL_STATS: Record<string, LinkStats> = {
     code: "gh-repo",
     total: 842,
     per_day: [
-      { date: "2026-09-28", count: 48 },
-      { date: "2026-09-29", count: 96 },
-      { date: "2026-09-30", count: 142 },
       { date: "2026-10-01", count: 210 },
       { date: "2026-10-02", count: 186 },
       { date: "2026-10-03", count: 160 },
+      { date: "2026-10-04", count: 142 },
+      { date: "2026-10-05", count: 96 },
+      { date: "2026-10-06", count: 48 },
     ],
     countries: [
       { country: "US", count: 395 },
+      { country: "IN", count: 180 },
       { country: "DE", count: 142 },
-      { country: "IN", count: 110 },
       { country: "GB", count: 98 },
-      { country: "JP", count: 52 },
-      { country: "FR", count: 45 },
+      { country: "JP", count: 27 },
     ],
     devices: [
       { device_type: "desktop", count: 512 },
@@ -149,8 +117,8 @@ export function clearToken() {
 }
 
 // ── Persistent Link & Analytics Storage ──────────────────────────────────────
-const LINKS_KEY = "scalelink_stored_links_v1";
-const STATS_KEY = "scalelink_stored_stats_v1";
+const LINKS_KEY = "scalelink_stored_links_v2";
+const STATS_KEY = "scalelink_stored_stats_v2";
 
 export function loadStoredLinks(): Link[] {
   try {
@@ -162,7 +130,7 @@ export function loadStoredLinks(): Link[] {
       }
     }
   } catch {}
-  // Default to INITIAL_LINKS on first load
+  // Default to INITIAL_LINKS on first load (1 clean example link)
   saveStoredLinks(INITIAL_LINKS);
   return INITIAL_LINKS;
 }

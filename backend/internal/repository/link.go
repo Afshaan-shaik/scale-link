@@ -219,6 +219,52 @@ func (r *LinkRepository) ListByUser(ctx context.Context, userID uuid.UUID, limit
 	return links, total, nil
 }
 
+// ListAll returns all active links for public overview.
+func (r *LinkRepository) ListAll(ctx context.Context, limit, offset int, search string) ([]*model.Link, int, error) {
+	if r.pool == nil {
+		ensureMemLinks()
+		memLinksMu.RLock()
+		defer memLinksMu.RUnlock()
+		var res []*model.Link
+		for _, l := range memLinks {
+			if l.DeletedAt == nil {
+				if search == "" || strings.Contains(strings.ToLower(l.LongURL), strings.ToLower(search)) || strings.Contains(strings.ToLower(l.Code), strings.ToLower(search)) {
+					copy := *l
+					res = append(res, &copy)
+				}
+			}
+		}
+		return res, len(res), nil
+	}
+
+	query := `
+		SELECT id, code, long_url, user_id, expires_at, created_at, updated_at, deleted_at, click_count, is_custom
+		FROM   links
+		WHERE  deleted_at IS NULL
+		ORDER  BY created_at DESC
+		LIMIT  $1 OFFSET $2`
+
+	rows, err := r.pool.Query(ctx, query, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list all links: %w", err)
+	}
+	defer rows.Close()
+
+	var links []*model.Link
+	for rows.Next() {
+		link := &model.Link{}
+		if err := rows.Scan(
+			&link.ID, &link.Code, &link.LongURL, &link.UserID,
+			&link.ExpiresAt, &link.CreatedAt, &link.UpdatedAt,
+			&link.DeletedAt, &link.ClickCount, &link.IsCustom,
+		); err != nil {
+			return nil, 0, fmt.Errorf("scan link row: %w", err)
+		}
+		links = append(links, link)
+	}
+	return links, len(links), nil
+}
+
 // UpdateExpiry allows changing the expiry time of a link.
 // Returns ErrNotFound if the link doesn't belong to the user.
 func (r *LinkRepository) UpdateExpiry(ctx context.Context, id uuid.UUID, userID uuid.UUID, expiresAt *time.Time) (string, error) {

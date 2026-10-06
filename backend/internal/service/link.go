@@ -203,6 +203,16 @@ func (s *LinkService) ListByUser(ctx context.Context, userID uuid.UUID, limit, o
 	return s.linkRepo.ListByUser(ctx, userID, limit, offset, search)
 }
 
+// ListPublic returns all active links for public monitoring.
+func (s *LinkService) ListPublic(ctx context.Context, limit, offset int, search string) ([]*model.Link, int, error) {
+	return s.linkRepo.ListAll(ctx, limit, offset, search)
+}
+
+// IncrementClick atomically increments click count for a link.
+func (s *LinkService) IncrementClick(ctx context.Context, code string) error {
+	return s.linkRepo.IncrementClickCount(ctx, code, 1)
+}
+
 // GetByCode returns a link by code (including expiry info, for stats access).
 func (s *LinkService) GetByCode(ctx context.Context, code string) (*model.Link, error) {
 	return s.linkRepo.GetByCode(ctx, code)

@@ -14,14 +14,15 @@ import {
   ShieldCheck,
   Share2
 } from 'lucide-react';
-import { Link } from '../api';
+import { Link, recordLinkClick } from '../api';
 
 interface CreateLinkCardProps {
   onLinkCreated: (link: Link) => void;
   onViewStats: (code: string) => void;
+  onLinkClick?: (code: string) => void;
 }
 
-export const CreateLinkCard: React.FC<CreateLinkCardProps> = ({ onLinkCreated, onViewStats }) => {
+export const CreateLinkCard: React.FC<CreateLinkCardProps> = ({ onLinkCreated, onViewStats, onLinkClick }) => {
   const [longUrl, setLongUrl] = useState('');
   const [customAlias, setCustomAlias] = useState('');
   const [expiryOption, setExpiryOption] = useState<'never' | '1h' | '24h' | '7d' | '30d'>('never');
@@ -308,6 +309,11 @@ export const CreateLinkCard: React.FC<CreateLinkCardProps> = ({ onLinkCreated, o
                 href={createdLink.short_url}
                 target="_blank"
                 rel="noreferrer"
+                onClick={() => {
+                  recordLinkClick(createdLink.code);
+                  onLinkClick?.(createdLink.code);
+                  fetch(`/api/links?code=${encodeURIComponent(createdLink.code)}&click=true`).catch(() => {});
+                }}
                 className="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 text-xs font-semibold transition-all flex items-center space-x-1.5 border border-emerald-500/40 shadow-sm"
                 title="Test short link redirect"
               >

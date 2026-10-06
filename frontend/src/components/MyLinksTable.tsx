@@ -13,24 +13,32 @@ import {
   Link2,
   Calendar
 } from 'lucide-react';
-import { Link } from '../api';
+import { Link, recordLinkClick } from '../api';
 
 interface MyLinksTableProps {
   links: Link[];
   onDeleteLink: (id: string) => void;
   onViewStats: (code: string) => void;
   onNavigateToCreate: () => void;
+  onLinkClick?: (code: string) => void;
 }
 
 export const MyLinksTable: React.FC<MyLinksTableProps> = ({ 
   links, 
   onDeleteLink, 
   onViewStats, 
-  onNavigateToCreate 
+  onNavigateToCreate,
+  onLinkClick
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [activeQrModal, setActiveQrModal] = useState<{ code: string; url: string; qrData: string } | null>(null);
+
+  const handleLinkOpen = (code: string) => {
+    recordLinkClick(code);
+    onLinkClick?.(code);
+    fetch(`/api/links?code=${encodeURIComponent(code)}&click=true`).catch(() => {});
+  };
 
   const filteredLinks = links.filter(
     (l) =>
@@ -177,6 +185,7 @@ export const MyLinksTable: React.FC<MyLinksTableProps> = ({
                         href={link.short_url}
                         target="_blank"
                         rel="noreferrer"
+                        onClick={() => handleLinkOpen(link.code)}
                         className="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors border border-slate-700/60"
                         title="Open short link"
                       >

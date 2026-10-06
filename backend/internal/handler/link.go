@@ -218,6 +218,7 @@ func (h *LinkHandler) Redirect(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("X-Cache", "MISS")
 	w.Header().Set("X-Served-By", "db")
+	_ = h.linkSvc.IncrementClick(r.Context(), code)
 	h.publishClick(r, code)
 	http.Redirect(w, r, link.LongURL, h.redirectCode)
 }
@@ -263,7 +264,7 @@ type linkSummary struct {
 	IsExpired  bool       `json:"is_expired"`
 }
 
-// ListLinks handles GET /api/links (optional code query or auth required for user list)
+// ListLinks handles GET /api/links (optional code query, public overview, or auth user list)
 func (h *LinkHandler) ListLinks(w http.ResponseWriter, r *http.Request) {
 	baseURL := r.Header.Get("X-Base-URL")
 	if baseURL == "" {
@@ -272,13 +273,14 @@ func (h *LinkHandler) ListLinks(w http.ResponseWriter, r *http.Request) {
 
 	q := r.URL.Query()
 	if code := q.Get("code"); code != "" {
-		link, err := h.linkSvc.Resolve(r.Context(), code)
+		if q.Get("click") == "true" {
+			_ = h.linkSvc.IncrementClick(r.Context(), code)
+			h.publishClick(r, code)
+		}
+		link, err := h.linkSvc.GetByCode(r.Context(), code)
 		if err != nil {
 			respondError(w, http.StatusNotFound, "link not found")
 			return
-		}
-		if q.Get("click") == "true" {
-			h.publishClick(r, code)
 		}
 		respond(w, http.StatusOK, map[string]interface{}{
 			"link": toLinkSummary(link, baseURL),
@@ -286,23 +288,39 @@ func (h *LinkHandler) ListLinks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims, ok := middleware.ClaimsFromContext(r.Context())
-	if !ok {
-		respondError(w, http.StatusUnauthorized, "authentication required")
-		return
-	}
-	userID, err := uuid.Parse(claims.UserID)
-	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid user ID in token")
-		return
-	}
-
-	limit := parseInt(q.Get("limit"), 20)
+	limit := parseInt(q.Get("limit"), 50)
 	offset := parseInt(q.Get("offset"), 0)
 	search := q.Get("q")
 
 	if limit > 100 {
 		limit = 100
+	}
+
+	claims, ok := middleware.ClaimsFromContext(r.Context())
+	if !ok {
+		// Public listing of active links with real-time click counts
+		links, total, err := h.linkSvc.ListPublic(r.Context(), limit, offset, search)
+		if err == nil {
+			summaries := make([]*linkSummary, 0, len(links))
+			for _, l := range links {
+				summaries = append(summaries, toLinkSummary(l, baseURL))
+			}
+			respond(w, http.StatusOK, listLinksResponse{
+				Links:  summaries,
+				Total:  total,
+				Limit:  limit,
+				Offset: offset,
+			})
+			return
+		}
+		respondError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid user ID in token")
+		return
 	}
 
 	links, total, err := h.linkSvc.ListByUser(r.Context(), userID, limit, offset, search)
@@ -327,7 +345,11 @@ func (h *LinkHandler) ListLinks(w http.ResponseWriter, r *http.Request) {
 // ResolvePublic handles public GET /api/links/resolve/{code}
 func (h *LinkHandler) ResolvePublic(w http.ResponseWriter, r *http.Request) {
 	code := chi.URLParam(r, "code")
-	link, err := h.linkSvc.Resolve(r.Context(), code)
+	if r.URL.Query().Get("click") == "true" {
+		_ = h.linkSvc.IncrementClick(r.Context(), code)
+		h.publishClick(r, code)
+	}
+	link, err := h.linkSvc.GetByCode(r.Context(), code)
 	if err != nil {
 		respondError(w, http.StatusNotFound, "link not found")
 		return
@@ -335,9 +357,6 @@ func (h *LinkHandler) ResolvePublic(w http.ResponseWriter, r *http.Request) {
 	baseURL := r.Header.Get("X-Base-URL")
 	if baseURL == "" {
 		baseURL = fmt.Sprintf("%s://%s", scheme(r), r.Host)
-	}
-	if r.URL.Query().Get("click") == "true" {
-		h.publishClick(r, code)
 	}
 	respond(w, http.StatusOK, map[string]interface{}{
 		"link": toLinkSummary(link, baseURL),

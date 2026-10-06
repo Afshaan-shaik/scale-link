@@ -1,17 +1,4 @@
-import React, { useState } from 'react';
-import { 
-  ArrowRight, 
-  Database, 
-  Cpu, 
-  Globe, 
-  Layers, 
-  Zap, 
-  Radio, 
-  CheckCircle2, 
-  Clock, 
-  Activity,
-  AlertTriangle
-} from 'lucide-react';
+import React, { useState, useEffect } from 'react';
 
 interface RequestPathStripProps {
   lastEvent?: {
@@ -24,8 +11,9 @@ interface RequestPathStripProps {
 }
 
 export const RequestPathStrip: React.FC<RequestPathStripProps> = ({ lastEvent }) => {
-  const [activeStep, setActiveStep] = useState<number>(3); // 3 = Cache
+  const [activeStep, setActiveStep] = useState<number>(5); // All lit initially
   const [isSimulating, setIsSimulating] = useState(false);
+  const [isMissSimulation, setIsMissSimulation] = useState(false);
   const [simulatedPath, setSimulatedPath] = useState<{
     cache: 'HIT' | 'MISS';
     latency: number;
@@ -38,197 +26,167 @@ export const RequestPathStrip: React.FC<RequestPathStripProps> = ({ lastEvent })
     code: lastEvent?.code || 'gh-repo',
   });
 
+  // Keep code in sync if lastEvent changes
+  useEffect(() => {
+    if (lastEvent?.code) {
+      setSimulatedPath(prev => ({
+        ...prev,
+        code: lastEvent.code,
+        latency: lastEvent.latencyMs || prev.latency,
+      }));
+    }
+  }, [lastEvent]);
+
   const triggerSimulation = (type: 'HIT' | 'MISS') => {
+    if (isSimulating) return;
     setIsSimulating(true);
-    setActiveStep(0);
+    setIsMissSimulation(type === 'MISS');
+    setActiveStep(-1);
 
-    const steps = [0, 1, 2, 3, type === 'MISS' ? 4 : 5, 5, 6];
-    let currentIdx = 0;
+    const isHit = type === 'HIT';
+    setSimulatedPath({
+      cache: type,
+      latency: isHit ? 1.8 : 14.6,
+      servedBy: isHit ? 'redis' : 'db',
+      code: lastEvent?.code || 'gh-repo',
+    });
 
-    const interval = setInterval(() => {
-      currentIdx++;
-      if (currentIdx < steps.length) {
-        setActiveStep(steps[currentIdx]);
-      } else {
-        clearInterval(interval);
-        setIsSimulating(false);
-        setSimulatedPath({
-          cache: type,
-          latency: type === 'HIT' ? +(Math.random() * 1.5 + 1.2).toFixed(1) : +(Math.random() * 12 + 15).toFixed(1),
-          servedBy: type === 'HIT' ? 'redis' : 'db',
-          code: type === 'HIT' ? 'gh-repo' : 'new-link-' + Math.floor(Math.random() * 900 + 100),
-        });
-      }
-    }, 180);
+    // Light the steps one by one every ~320ms
+    const totalSteps = 6;
+    for (let i = 0; i < totalSteps; i++) {
+      setTimeout(() => {
+        setActiveStep(i);
+        if (i === totalSteps - 1) {
+          setIsSimulating(false);
+        }
+      }, i * 320);
+    }
   };
 
-  return (
-    <div className="glass-card rounded-2xl p-5 mb-8 border border-slate-800 shadow-xl relative overflow-hidden">
-      {/* Background Glow */}
-      <div className="absolute -top-24 -left-24 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+  const isHit = simulatedPath.cache === 'HIT';
 
-      {/* Header bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
+  return (
+    <div className="luxe-hero">
+      {/* Header with Title and Simulation Controls */}
+      <div className="flex flex-wrap gap-[28px] justify-between items-start">
         <div>
-          <div className="flex items-center space-x-2">
-            <Activity className="w-5 h-5 text-emerald-400 animate-pulse" />
-            <h3 className="font-bold text-slate-100 text-base tracking-tight">
-              Real-Time Request Pipeline & Cache-Aside Strip
-            </h3>
-            <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-              Live Flow
+          <h2 className="text-white flex items-center flex-wrap">
+            Real-time request pipeline &amp; cache-aside strip
+            <span className="font-mono text-[11px] text-[var(--em)] border border-[#34d6a066] rounded-full px-3 py-[3px] ml-3 align-middle tracking-widest font-medium">
+              LIVE FLOW
             </span>
-          </div>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Observing incoming GET /{simulatedPath.code} redirects traversing Nginx, Redis Token Bucket, Cache-Aside, and Streams
+          </h2>
+          <p className="text-[var(--mut)] text-[14px] mt-[10px] max-w-[56ch]">
+            Observing incoming GET /{simulatedPath.code} redirects traversing Nginx, Redis Token Bucket, Cache-Aside, and Streams.
           </p>
         </div>
 
-        {/* Quick Simulator Buttons */}
-        <div className="flex items-center space-x-2">
-          <button
+        {/* Simulator Buttons */}
+        <div className="flex gap-[14px] flex-wrap items-center">
+          <button 
             onClick={() => triggerSimulation('HIT')}
             disabled={isSimulating}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/40 transition-all flex items-center space-x-1.5 shadow-sm active:scale-95 disabled:opacity-50"
+            className="luxe-btn text-[var(--em)] border-[#34d6a066] hover:border-[var(--em)] disabled:opacity-50"
           >
-            <Zap className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Simulate Cache HIT (Warm)</span>
+            Simulate cache hit (warm)
           </button>
-          <button
+          <button 
             onClick={() => triggerSimulation('MISS')}
             disabled={isSimulating}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/40 transition-all flex items-center space-x-1.5 shadow-sm active:scale-95 disabled:opacity-50"
+            className="luxe-btn text-[var(--amber)] border-[#f0b44c66] hover:border-[var(--amber)] disabled:opacity-50"
           >
-            <Database className="w-3.5 h-3.5 text-amber-400" />
-            <span>Simulate Cache MISS (Cold)</span>
+            Simulate cache miss (cold)
           </button>
         </div>
       </div>
 
-      {/* Pipeline Visual Nodes */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-2 sm:gap-3 my-4">
-        {/* Step 1: Client */}
-        <div className={`p-3 rounded-xl border transition-all ${
-          activeStep === 0 
-            ? 'bg-emerald-500/20 border-emerald-400 shadow-md shadow-emerald-500/10' 
-            : 'bg-slate-900/60 border-slate-800'
-        }`}>
-          <div className="flex items-center justify-between mb-1.5">
-            <Globe className="w-4 h-4 text-sky-400" />
-            <span className="text-[10px] font-mono text-slate-400">Step 1</span>
-          </div>
-          <p className="text-xs font-semibold text-white">Client Device</p>
-          <p className="text-[11px] text-slate-400 truncate">HTTP GET /{simulatedPath.code}</p>
+      {/* 6 Step Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-[20px] my-[48px] mb-[40px]">
+        {/* Step 1 */}
+        <div className={`luxe-step ${activeStep >= 0 ? 'lit' : ''}`}>
+          <small className="block text-[var(--mut)] font-mono text-[12px] font-medium mb-[22px]">Step 1</small>
+          <b className="block text-[17px] text-white">Client Device</b>
+          <span className="text-[var(--mut)] text-[14px]">HTTP GET /{simulatedPath.code}</span>
         </div>
 
-        {/* Step 2: Nginx */}
-        <div className={`p-3 rounded-xl border transition-all ${
-          activeStep === 1 
-            ? 'bg-emerald-500/20 border-emerald-400 shadow-md shadow-emerald-500/10' 
-            : 'bg-slate-900/60 border-slate-800'
-        }`}>
-          <div className="flex items-center justify-between mb-1.5">
-            <Layers className="w-4 h-4 text-emerald-400" />
-            <span className="text-[10px] font-mono text-slate-400">Step 2</span>
-          </div>
-          <p className="text-xs font-semibold text-white">Nginx Proxy</p>
-          <p className="text-[11px] text-slate-400 truncate">:8080 Load Balancer</p>
+        {/* Step 2 */}
+        <div className={`luxe-step ${activeStep >= 1 ? 'lit' : ''}`}>
+          <small className="block text-[var(--mut)] font-mono text-[12px] font-medium mb-[22px]">Step 2</small>
+          <b className="block text-[17px] text-white">Nginx Proxy</b>
+          <span className="text-[var(--mut)] text-[14px]">:8080 Load Balancer</span>
         </div>
 
-        {/* Step 3: Token Bucket Rate Limiter */}
-        <div className={`p-3 rounded-xl border transition-all ${
-          activeStep === 2 
-            ? 'bg-emerald-500/20 border-emerald-400 shadow-md shadow-emerald-500/10' 
-            : 'bg-slate-900/60 border-slate-800'
-        }`}>
-          <div className="flex items-center justify-between mb-1.5">
-            <Zap className="w-4 h-4 text-amber-400" />
-            <span className="text-[10px] font-mono text-slate-400">Step 3</span>
-          </div>
-          <p className="text-xs font-semibold text-white">Token Bucket</p>
-          <p className="text-[11px] text-emerald-400 truncate">Allowed (Lua Script)</p>
+        {/* Step 3 */}
+        <div className={`luxe-step ${activeStep >= 2 ? 'lit' : ''}`}>
+          <small className="block text-[var(--mut)] font-mono text-[12px] font-medium mb-[22px]">Step 3</small>
+          <b className="block text-[17px] text-white">Token Bucket</b>
+          <span className="text-[var(--mut)] text-[14px]">Allowed (Lua Script)</span>
         </div>
 
-        {/* Step 4: Redis Cache */}
-        <div className={`p-3 rounded-xl border transition-all ${
-          activeStep === 3 
-            ? simulatedPath.cache === 'HIT' 
-              ? 'bg-emerald-500/20 border-emerald-400 ring-2 ring-emerald-500/30' 
-              : 'bg-amber-500/20 border-amber-400 ring-2 ring-amber-500/30'
-            : 'bg-slate-900/60 border-slate-800'
+        {/* Step 4 */}
+        <div className={`luxe-step ${
+          activeStep >= 3 
+            ? isMissSimulation 
+              ? 'miss lit' 
+              : 'lit' 
+            : ''
         }`}>
-          <div className="flex items-center justify-between mb-1.5">
-            <Cpu className="w-4 h-4 text-purple-400" />
-            <span className="text-[10px] font-mono text-slate-400">Step 4</span>
-          </div>
-          <div className="flex items-center space-x-1">
-            <p className="text-xs font-semibold text-white">Redis Cache</p>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
-              simulatedPath.cache === 'HIT' ? 'bg-emerald-500/30 text-emerald-300' : 'bg-amber-500/30 text-amber-300'
+          <small className="block text-[var(--mut)] font-mono text-[12px] font-medium mb-[22px]">Step 4</small>
+          <b className="block text-[17px] text-white">
+            Redis Cache
+            <i className={`font-mono text-[11px] font-semibold px-2.5 py-0.5 rounded-[8px] ml-1.5 not-italic ${
+              isHit 
+                ? 'bg-[#34d6a022] text-[var(--em)]' 
+                : 'bg-[#f0b44c22] text-[var(--amber)]'
             }`}>
               {simulatedPath.cache}
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-400 truncate">
-            {simulatedPath.cache === 'HIT' ? 'Served in ~1.8ms' : 'Miss -> Query DB'}
-          </p>
+            </i>
+          </b>
+          <span className="text-[var(--mut)] text-[14px]">
+            {isHit ? 'Served in ~1.8ms' : 'Not found — fetching origin'}
+          </span>
         </div>
 
-        {/* Step 5: PostgreSQL (Miss Path) */}
-        <div className={`p-3 rounded-xl border transition-all ${
-          activeStep === 4 
-            ? 'bg-amber-500/20 border-amber-400' 
-            : 'bg-slate-900/60 border-slate-800 opacity-80'
+        {/* Step 5 */}
+        <div className={`luxe-step ${
+          activeStep >= 4 
+            ? isMissSimulation 
+              ? 'miss lit' 
+              : 'lit' 
+            : ''
         }`}>
-          <div className="flex items-center justify-between mb-1.5">
-            <Database className="w-4 h-4 text-sky-400" />
-            <span className="text-[10px] font-mono text-slate-400">Step 5</span>
-          </div>
-          <p className="text-xs font-semibold text-white">PostgreSQL 16</p>
-          <p className="text-[11px] text-slate-400 truncate">
-            {simulatedPath.cache === 'MISS' ? 'Read & Populate Cache' : 'Bypassed (Hot Cache)'}
-          </p>
+          <small className="block text-[var(--mut)] font-mono text-[12px] font-medium mb-[22px]">Step 5</small>
+          <b className="block text-[17px] text-white">PostgreSQL 16</b>
+          <span className="text-[var(--mut)] text-[14px]">
+            {isHit ? 'Bypassed (Hot Cache)' : 'Queried, cache warmed'}
+          </span>
         </div>
 
-        {/* Step 6: Async Redis Stream & Worker */}
-        <div className={`p-3 rounded-xl border transition-all ${
-          activeStep >= 5 
-            ? 'bg-teal-500/20 border-teal-400 shadow-md shadow-teal-500/10' 
-            : 'bg-slate-900/60 border-slate-800'
-        }`}>
-          <div className="flex items-center justify-between mb-1.5">
-            <Radio className="w-4 h-4 text-teal-400" />
-            <span className="text-[10px] font-mono text-slate-400">Step 6</span>
-          </div>
-          <p className="text-xs font-semibold text-white">Redis Streams</p>
-          <p className="text-[11px] text-teal-400 truncate">clicks:events (Async)</p>
+        {/* Step 6 */}
+        <div className={`luxe-step ${activeStep >= 5 ? 'lit' : ''}`}>
+          <small className="block text-[var(--mut)] font-mono text-[12px] font-medium mb-[22px]">Step 6</small>
+          <b className="block text-[17px] text-white">Redis Streams</b>
+          <span className="text-[var(--mut)] text-[14px]">clicks:events (Async)</span>
         </div>
       </div>
 
-      {/* Live Response Headers Strip */}
-      <div className="mt-4 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
-        <div className="flex items-center space-x-3">
-          <span className="text-slate-400">HTTP Response:</span>
-          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
-            302 Found
-          </span>
-          <span className="text-slate-300">
-            X-Cache: <strong className={simulatedPath.cache === 'HIT' ? 'text-emerald-400' : 'text-amber-400'}>{simulatedPath.cache}</strong>
-          </span>
-          <span className="text-slate-300">
-            X-Served-By: <strong className="text-sky-400">{simulatedPath.servedBy}</strong>
-          </span>
-          <span className="text-slate-300 flex items-center space-x-1">
-            <Clock className="w-3.5 h-3.5 text-slate-400" />
-            <span>{simulatedPath.latency}ms</span>
-          </span>
-        </div>
-
-        <div className="flex items-center space-x-2 text-[11px] text-slate-400">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Non-blocking async click event published to worker group</span>
-        </div>
+      {/* Response Strip */}
+      <div className="flex flex-wrap gap-[20px_36px] items-center border-t border-[var(--line)] pt-[30px] font-mono text-[14px] text-[var(--mut)]">
+        <span>
+          HTTP Response: <i className="not-italic bg-[#34d6a022] rounded-[8px] px-3 py-[3px] text-[var(--em)] font-semibold ml-1">302 Found</i>
+        </span>
+        <span>
+          X-Cache: <em className="not-italic text-[var(--em)] font-semibold ml-1">{simulatedPath.cache}</em>
+        </span>
+        <span>
+          X-Served-By: <em className="not-italic text-[var(--em)] font-semibold ml-1">{simulatedPath.servedBy}</em>
+        </span>
+        <span>
+          {simulatedPath.latency}ms
+        </span>
+        <span className="sm:ml-auto text-[13px] text-[var(--mut)]">
+          Non-blocking async click event published to worker group
+        </span>
       </div>
     </div>
   );

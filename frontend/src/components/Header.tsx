@@ -6,19 +6,26 @@ import {
   Server, 
   Zap, 
   ListFilter,
-  Activity
+  Activity,
+  Plus
 } from 'lucide-react';
 
 interface HeaderProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   linksCount: number;
+  workspaceId?: string;
+  onTransferWorkspace?: () => void;
+  onStartNewWorkspace?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ 
   activeTab, 
   setActiveTab, 
   linksCount,
+  workspaceId,
+  onTransferWorkspace,
+  onStartNewWorkspace,
 }) => {
   const tabs = [
     { id: 'shorten', label: 'Shorten', icon: Link2 },
@@ -30,99 +37,80 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'observability', label: 'Observability', icon: Activity },
   ];
 
-  const productionHost =
-    typeof window !== 'undefined' && window.location.hostname !== 'localhost'
-      ? window.location.hostname
-      : 'localhost:8080';
+  const shortWs = workspaceId ? `ws:${workspaceId.slice(0, 6)}` : 'ws:ready';
 
   return (
-    <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo & Tagline - Spacious and clean */}
-          <div 
-            className="flex items-center space-x-3.5 cursor-pointer py-1 select-none" 
-            onClick={() => setActiveTab('shorten')}
+    <div className="w-full">
+      {/* Top Header Row */}
+      <header className="py-[36px] pb-[28px] flex flex-wrap gap-[28px] items-center justify-between">
+        {/* Brand / Logo */}
+        <div 
+          className="flex items-center gap-[18px] cursor-pointer select-none"
+          onClick={() => setActiveTab('shorten')}
+        >
+          <div className="luxe-logo">
+            <svg viewBox="0 0 24 24" className="w-[26px] h-[26px] stroke-[#04130e] fill-none stroke-[2.4]">
+              <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>
+            </svg>
+          </div>
+          <div>
+            <h1 className="text-white flex items-center">
+              ScaleLink
+              <span className="luxe-badge">100M scale</span>
+            </h1>
+            <p className="text-[var(--mut)] text-[14px]">Production URL shortener &amp; click analytics</p>
+          </div>
+        </div>
+
+        {/* Side Controls */}
+        <div className="flex gap-[14px] items-center flex-wrap">
+          <span 
+            className="luxe-pill" 
+            title={`Workspace ID: ${workspaceId || 'Initializing'}`}
           >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
-              <Link2 className="w-6 h-6 text-slate-950 font-bold stroke-[2.5]" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="font-extrabold text-xl tracking-tight text-white">
-                  Scale<span className="text-emerald-400">Link</span>
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 hidden sm:block">Production URL Shortener & Click Analytics</p>
-            </div>
-          </div>
-
-          {/* Navigation Tabs - Generous spacing & breathing room */}
-          <nav className="hidden md:flex items-center space-x-1.5 lg:space-x-2">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-all ${
-                    isActive
-                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shadow-sm'
-                      : 'text-slate-300 hover:text-white hover:bg-slate-800/60 border border-transparent'
-                  }`}
-                >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
-                  <span>{tab.label}</span>
-                  {tab.count !== undefined && (
-                    <span className="ml-1 text-[11px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                      {tab.count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-
-          {/* Status Badge - Spacious & Uncrowded */}
-          <div className="flex items-center space-x-3">
-            <div className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-slate-850 border border-slate-700/60 text-xs">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span className="text-slate-300 font-mono text-xs">{productionHost}</span>
-            </div>
-          </div>
+            {shortWs}
+          </span>
+          {onTransferWorkspace && (
+            <button 
+              onClick={onTransferWorkspace}
+              className="luxe-btn"
+              title="Transfer workspace to another device or browser"
+            >
+              Transfer
+            </button>
+          )}
+          {onStartNewWorkspace && (
+            <button 
+              onClick={onStartNewWorkspace}
+              className="luxe-btn px-4"
+              title="Start a fresh anonymous workspace for this tab"
+              aria-label="New workspace"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          )}
         </div>
+      </header>
 
-        {/* Mobile Navigation Row */}
-        <div className="flex md:hidden overflow-x-auto py-2.5 space-x-1.5 scrollbar-none border-t border-slate-800/60">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-all ${
-                  isActive
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{tab.label}</span>
-                {tab.count !== undefined && (
-                  <span className="text-[10px] px-1 rounded-full bg-slate-800 text-slate-300">
-                    {tab.count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </header>
+      {/* Tab Navigation - One rounded 22px bar */}
+      <nav id="nav" className="luxe-nav" aria-label="Main Navigation">
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={isActive ? 'on' : ''}
+              data-t={tab.id}
+            >
+              <span>{tab.label}</span>
+              {tab.count !== undefined && (
+                <span className="luxe-cnt">{tab.count}</span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+    </div>
   );
 };

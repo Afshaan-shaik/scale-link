@@ -132,11 +132,11 @@ function StatusBadge({ status }: { status: string }) {
   const degraded = status === 'degraded';
   return (
     <span
-      className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+      className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold border font-mono ${
         ok
-          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+          ? 'bg-[#34d6a018] text-[var(--em)] border-[#34d6a033]'
           : degraded
-          ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+          ? 'bg-[#f0b44c18] text-[var(--amber)] border-[#f0b44c33]'
           : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
       }`}
     >
@@ -158,7 +158,7 @@ function CheckStatus({ value }: { value: string }) {
   return (
     <span
       className={`text-xs font-mono font-semibold ${
-        isOk ? 'text-emerald-400' : isNA ? 'text-slate-400' : 'text-rose-400'
+        isOk ? 'text-[var(--em)]' : isNA ? 'text-[var(--mut)]' : 'text-rose-400'
       }`}
     >
       {isOk ? '✓ OK' : isNA ? '– N/A' : '✗ ' + value.replace(/^unhealthy: /, '')}
@@ -180,21 +180,21 @@ function MetricCard({
   color?: string;
 }) {
   const cls: Record<string, string> = {
-    emerald: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-    sky: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
-    purple: 'text-purple-400 bg-purple-500/10 border-purple-500/20',
-    amber: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+    emerald: 'text-[var(--em)] bg-[#34d6a018] border-[#34d6a033]',
+    sky: 'text-[var(--sky)] bg-[#6cc8f018] border-[#6cc8f033]',
+    purple: 'text-[var(--gold)] bg-[#e3c38318] border-[#e3c38333]',
+    amber: 'text-[var(--amber)] bg-[#f0b44c18] border-[#f0b44c33]',
     rose: 'text-rose-400 bg-rose-500/10 border-rose-500/20',
-    teal: 'text-teal-400 bg-teal-500/10 border-teal-500/20',
+    teal: 'text-[var(--em)] bg-[#34d6a018] border-[#34d6a033]',
   };
   return (
-    <div className="glass-card p-5 rounded-2xl border border-slate-800 flex flex-col gap-2">
-      <div className={`w-9 h-9 rounded-xl flex items-center justify-center border ${cls[color] ?? cls['emerald']}`}>
-        <Icon className="w-4 h-4" />
+    <div className="luxe-inner-card p-6 flex flex-col gap-2.5">
+      <div className={`w-10 h-10 rounded-[14px] flex items-center justify-center border ${cls[color] ?? cls['emerald']}`}>
+        <Icon className="w-5 h-5" />
       </div>
-      <div className="text-2xl font-extrabold font-mono text-white leading-none">{value}</div>
-      <div className="text-xs text-slate-400 font-medium">{label}</div>
-      {sub && <div className="text-[11px] text-slate-500">{sub}</div>}
+      <div className="text-3xl font-extrabold font-mono text-white leading-none mt-1">{value}</div>
+      <div className="text-xs text-[var(--tx)] font-semibold">{label}</div>
+      {sub && <div className="text-[11px] text-[var(--mut)] font-mono">{sub}</div>}
     </div>
   );
 }
@@ -203,18 +203,18 @@ function CacheRatioBar({ hits, misses }: { hits: number; misses: number }) {
   const total = hits + misses;
   const ratio = total > 0 ? (hits / total) * 100 : 0;
   return (
-    <div className="space-y-1">
-      <div className="flex justify-between text-xs text-slate-400">
+    <div className="space-y-2">
+      <div className="flex justify-between text-xs text-[var(--mut)]">
         <span>Cache Hit Ratio</span>
-        <span className="font-mono font-bold text-emerald-400">{ratio.toFixed(1)}%</span>
+        <span className="font-mono font-bold text-[var(--em)]">{ratio.toFixed(1)}%</span>
       </div>
-      <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+      <div className="w-full h-3 rounded-full bg-[var(--bg)] border border-[var(--line)] overflow-hidden">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-700"
+          className="h-full rounded-full bg-gradient-to-r from-[var(--em)] to-[var(--gold)] transition-all duration-700"
           style={{ width: `${Math.max(ratio, 0)}%` }}
         />
       </div>
-      <div className="flex justify-between text-[11px] text-slate-500 font-mono">
+      <div className="flex justify-between text-[11px] text-[var(--mut)] font-mono">
         <span>{hits.toLocaleString()} hits</span>
         <span>{misses.toLocaleString()} misses</span>
       </div>
@@ -316,80 +316,79 @@ export const ObservabilityDashboard: React.FC = () => {
       : '—';
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      {/* Banner */}
-      <div className="glass-card p-6 rounded-2xl border border-slate-800">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center">
-              <Activity className="w-5 h-5 text-sky-400" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-white tracking-tight">Production Observability</h2>
-              <p className="text-xs text-slate-400">
-                Live telemetry from{' '}
-                <span className="font-mono text-slate-300">{PROD_BASE}</span>
-                {' · '}auto-refreshes every 15s
-              </p>
-            </div>
+    <div className="w-full space-y-8 animate-fadeIn">
+      {/* Banner Hero */}
+      <div className="luxe-hero flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-6 sm:p-8">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-[16px] bg-[#6cc8f018] border border-[#6cc8f033] flex items-center justify-center shrink-0">
+            <Activity className="w-6 h-6 text-[var(--sky)]" />
           </div>
-          <div className="flex items-center gap-3">
-            {health && <StatusBadge status={health.status} />}
-            <button
-              onClick={fetchAll}
-              disabled={refreshing}
-              className="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white border border-slate-700 hover:border-slate-600 bg-slate-900/60 hover:bg-slate-800 transition-all disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-              <span>{refreshing ? 'Refreshing…' : 'Refresh'}</span>
-            </button>
+          <div>
+            <h2 className="text-white text-[28px] sm:text-[32px]">Production Observability</h2>
+            <p className="text-[var(--mut)] text-xs sm:text-sm">
+              Live telemetry from{' '}
+              <span className="font-mono text-white">{PROD_BASE}</span>
+              {' · '}auto-refreshes every 15s
+            </p>
           </div>
         </div>
-        {lastRefresh && (
-          <p className="mt-3 flex items-center space-x-1.5 text-[11px] text-slate-500 font-mono">
-            <Clock className="w-3 h-3" />
-            <span>Last updated: {lastRefresh.toLocaleTimeString()}</span>
-          </p>
-        )}
+        <div className="flex items-center gap-3">
+          {health && <StatusBadge status={health.status} />}
+          <button
+            onClick={fetchAll}
+            disabled={refreshing}
+            className="luxe-btn py-2 px-4 text-xs font-semibold"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            <span>{refreshing ? 'Refreshing…' : 'Refresh'}</span>
+          </button>
+        </div>
       </div>
 
+      {lastRefresh && (
+        <p className="flex items-center gap-1.5 text-[12px] text-[var(--mut)] font-mono px-2">
+          <Clock className="w-3.5 h-3.5" />
+          <span>Last updated: {lastRefresh.toLocaleTimeString()}</span>
+        </p>
+      )}
+
       {/* Health Panel */}
-      <div className="glass-card p-6 rounded-2xl border border-slate-800">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-bold text-white flex items-center space-x-2">
-            <Shield className="w-4 h-4 text-emerald-400" />
+      <div className="luxe-card p-7 sm:p-9 shadow-xl">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-base font-bold text-white flex items-center gap-2">
+            <Shield className="w-5 h-5 text-[var(--em)]" />
             <span>Health Check — GET /health</span>
           </h3>
           {healthError && <span className="text-xs text-rose-400 font-mono">⚠ {healthError}</span>}
         </div>
         {health ? (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-              <div className="text-[11px] text-slate-500 uppercase tracking-wider">Overall</div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="p-5 rounded-[20px] bg-[var(--bg)] border border-[var(--line)] space-y-2">
+              <div className="text-[11px] text-[var(--mut)] uppercase tracking-wider font-mono">Overall</div>
               <StatusBadge status={health.status} />
             </div>
-            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-              <div className="text-[11px] text-slate-500 uppercase tracking-wider">Uptime</div>
+            <div className="p-5 rounded-[20px] bg-[var(--bg)] border border-[var(--line)] space-y-2">
+              <div className="text-[11px] text-[var(--mut)] uppercase tracking-wider font-mono">Uptime</div>
               <div className="text-sm font-mono font-bold text-white">{health.uptime}</div>
             </div>
             {Object.entries(health.checks).map(([name, value]) => (
-              <div key={name} className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-                <div className="text-[11px] text-slate-500 uppercase tracking-wider">{name}</div>
+              <div key={name} className="p-5 rounded-[20px] bg-[var(--bg)] border border-[var(--line)] space-y-2">
+                <div className="text-[11px] text-[var(--mut)] uppercase tracking-wider font-mono">{name}</div>
                 <CheckStatus value={value} />
               </div>
             ))}
           </div>
         ) : healthError ? (
-          <div className="p-4 rounded-xl bg-rose-500/5 border border-rose-500/20 text-rose-400 text-sm flex items-center space-x-2">
-            <XCircle className="w-4 h-4 flex-shrink-0" />
+          <div className="p-5 rounded-[20px] bg-rose-500/5 border border-rose-500/20 text-rose-400 text-sm flex items-center space-x-2">
+            <XCircle className="w-5 h-5 flex-shrink-0" />
             <span>
               Health endpoint unavailable.{' '}
               <span className="text-xs text-rose-400/70">({healthError})</span>
             </span>
           </div>
         ) : (
-          <div className="flex items-center space-x-3 text-slate-400 text-xs font-mono p-2">
-            <RefreshCw className="w-4 h-4 animate-spin" />
+          <div className="flex items-center space-x-3 text-[var(--mut)] text-xs font-mono p-2">
+            <RefreshCw className="w-4 h-4 animate-spin text-[var(--em)]" />
             <span>Polling /health…</span>
           </div>
         )}
@@ -398,67 +397,67 @@ export const ObservabilityDashboard: React.FC = () => {
       {/* Metrics Grid */}
       {metrics ? (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
             <MetricCard label="Total HTTP Requests" value={metrics.httpRequestsTotal.toLocaleString()} sub="Across all endpoints" icon={Globe} color="emerald" />
             <MetricCard label="Cache Hit Ratio" value={cacheHitRatio} sub={`${metrics.cacheHits.toLocaleString()} hits`} icon={Cpu} color="purple" />
             <MetricCard label="Stream Events Published" value={metrics.streamEventsPublished.toLocaleString()} sub="Click events → Redis" icon={Zap} color="teal" />
             <MetricCard label="Rate Limit 429s" value={metrics.rateLimitRejections.toLocaleString()} sub="Token bucket rejections" icon={AlertTriangle} color={metrics.rateLimitRejections > 0 ? 'amber' : 'emerald'} />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <MetricCard label="P99 Latency" value={metrics.p99Latency !== null ? `${metrics.p99Latency.toFixed(1)}ms` : '—'} sub="HTTP request duration" icon={Clock} color="sky" />
             <MetricCard label="Consumer Lag" value={String(metrics.streamLag)} sub={metrics.streamLag === 0 ? 'Worker fully caught up' : 'Unprocessed PEL events'} icon={Database} color={metrics.streamLag > 50 ? 'amber' : 'emerald'} />
             <MetricCard label="5xx Errors" value={metrics.httpRequestsError.toLocaleString()} sub="Server-side errors" icon={XCircle} color={metrics.httpRequestsError > 0 ? 'rose' : 'emerald'} />
           </div>
 
-          <div className="glass-card p-6 rounded-2xl border border-slate-800">
-            <h3 className="text-sm font-bold text-white mb-4 flex items-center space-x-2">
-              <Cpu className="w-4 h-4 text-purple-400" />
+          <div className="luxe-card p-7 sm:p-9 shadow-xl">
+            <h3 className="text-base font-bold text-white mb-5 flex items-center gap-2.5">
+              <Cpu className="w-5 h-5 text-[var(--gold)]" />
               <span>Redis Cache &amp; Stream Analytics</span>
             </h3>
             <CacheRatioBar hits={metrics.cacheHits} misses={metrics.cacheMisses} />
-            <div className="mt-4 grid grid-cols-3 gap-4 pt-4 border-t border-slate-800/80 text-center">
+            <div className="mt-6 grid grid-cols-3 gap-4 pt-6 border-t border-[var(--line)] text-center">
               <div>
-                <div className="text-xs text-slate-400">Events Consumed</div>
-                <div className="text-lg font-mono font-bold text-emerald-400">{metrics.streamEventsConsumed.toLocaleString()}</div>
+                <div className="text-xs text-[var(--mut)]">Events Consumed</div>
+                <div className="text-xl font-mono font-bold text-[var(--em)] mt-1">{metrics.streamEventsConsumed.toLocaleString()}</div>
               </div>
               <div>
-                <div className="text-xs text-slate-400">Events Published</div>
-                <div className="text-lg font-mono font-bold text-teal-400">{metrics.streamEventsPublished.toLocaleString()}</div>
+                <div className="text-xs text-[var(--mut)]">Events Published</div>
+                <div className="text-xl font-mono font-bold text-[var(--gold)] mt-1">{metrics.streamEventsPublished.toLocaleString()}</div>
               </div>
               <div>
-                <div className="text-xs text-slate-400">Consumer Lag</div>
-                <div className={`text-lg font-mono font-bold ${metrics.streamLag > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>{metrics.streamLag}</div>
+                <div className="text-xs text-[var(--mut)]">Consumer Lag</div>
+                <div className={`text-xl font-mono font-bold mt-1 ${metrics.streamLag > 0 ? 'text-[var(--amber)]' : 'text-[var(--em)]'}`}>{metrics.streamLag}</div>
               </div>
             </div>
           </div>
         </>
       ) : metricsError ? (
-        <div className="glass-card p-6 rounded-2xl border border-amber-500/20 bg-amber-500/5">
-          <div className="flex items-start space-x-3 text-amber-400 text-sm">
+        <div className="luxe-card p-7 border border-[#f0b44c44] bg-[#f0b44c10]">
+          <div className="flex items-start space-x-3 text-[var(--amber)] text-sm">
             <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
             <div>
               <div className="font-semibold">Metrics endpoint unreachable</div>
-              <div className="text-xs text-amber-400/70 mt-1">
+              <div className="text-xs text-[var(--mut)] mt-1">
                 The /metrics endpoint is available when the Go backend is deployed. Error: {metricsError}
               </div>
             </div>
           </div>
         </div>
       ) : (
-        <div className="flex items-center space-x-3 text-slate-400 text-xs font-mono p-4">
-          <RefreshCw className="w-4 h-4 animate-spin" />
+        <div className="flex items-center space-x-3 text-[var(--mut)] text-xs font-mono p-4">
+          <RefreshCw className="w-4 h-4 animate-spin text-[var(--em)]" />
           <span>Fetching metrics…</span>
         </div>
       )}
 
       {/* External Links */}
-      <div className="glass-card p-6 rounded-2xl border border-slate-800">
-        <h3 className="text-sm font-bold text-white mb-4 flex items-center space-x-2">
-          <ExternalLink className="w-4 h-4 text-sky-400" />
+      <div className="luxe-card p-7 sm:p-9 shadow-xl">
+        <h3 className="text-base font-bold text-white mb-5 flex items-center gap-2.5">
+          <ExternalLink className="w-5 h-5 text-[var(--sky)]" />
           <span>Observability Endpoints</span>
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {obsLinks.map((link) => {
             const Icon = link.icon;
             return (
@@ -467,26 +466,26 @@ export const ObservabilityDashboard: React.FC = () => {
                 href={link.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-start space-x-3 p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-sky-500/30 hover:bg-slate-900 transition-all group"
+                className="flex items-start gap-3.5 p-5 rounded-[20px] bg-[var(--bg)] border border-[var(--line)] hover:border-[var(--sky)] transition-all group"
               >
-                <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center flex-shrink-0 group-hover:border-sky-500/30 transition-colors">
-                  <Icon className="w-4 h-4 text-sky-400" />
+                <div className="w-10 h-10 rounded-[14px] bg-[var(--bg2)] border border-[var(--line)] flex items-center justify-center shrink-0 group-hover:border-[var(--sky)] transition-colors">
+                  <Icon className="w-5 h-5 text-[var(--sky)]" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-white group-hover:text-sky-400 transition-colors">{link.label}</div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">{link.desc}</div>
-                  <div className="text-[10px] font-mono text-slate-500 mt-1 truncate">{link.url}</div>
+                  <div className="text-sm font-semibold text-white group-hover:text-[var(--sky)] transition-colors">{link.label}</div>
+                  <div className="text-[12px] text-[var(--mut)] mt-0.5">{link.desc}</div>
+                  <div className="text-[11px] font-mono text-[var(--mut)] mt-1.5 truncate">{link.url}</div>
                 </div>
-                <ExternalLink className="w-3.5 h-3.5 text-slate-600 group-hover:text-sky-400 flex-shrink-0 transition-colors mt-0.5" />
+                <ExternalLink className="w-4 h-4 text-[var(--mut)] group-hover:text-[var(--sky)] shrink-0 transition-colors mt-0.5" />
               </a>
             );
           })}
         </div>
         {!GRAFANA_URL && (
-          <div className="mt-4 p-3 rounded-lg bg-slate-900/40 border border-slate-800/60 text-[11px] text-slate-500 flex items-start space-x-2">
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-500/60 flex-shrink-0 mt-0.5" />
+          <div className="mt-5 p-4 rounded-[16px] bg-[var(--bg)] border border-[var(--line)] text-xs text-[var(--mut)] flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-[var(--gold)] shrink-0 mt-0.5" />
             <span>
-              Set <span className="font-mono text-slate-400">VITE_GRAFANA_URL</span> in Vercel
+              Set <span className="font-mono text-white">VITE_GRAFANA_URL</span> in Vercel
               environment variables to enable the Grafana Cloud dashboard link.
             </span>
           </div>

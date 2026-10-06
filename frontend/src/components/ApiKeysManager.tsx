@@ -5,10 +5,7 @@ import {
   Copy, 
   Check, 
   Trash2, 
-  AlertTriangle, 
-  ShieldCheck, 
-  Calendar,
-  Lock
+  AlertTriangle
 } from 'lucide-react';
 import { APIKey } from '../api';
 
@@ -63,16 +60,18 @@ export const ApiKeysManager: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Top Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 glass-card p-6 rounded-2xl border border-slate-800">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
-            <Key className="w-5 h-5 text-purple-400" />
+    <div className="w-full space-y-8 animate-fadeIn">
+      {/* Top Bar Hero */}
+      <div className="luxe-hero flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-6 sm:p-8">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-[16px] bg-[#6cc8f018] border border-[#6cc8f033] flex items-center justify-center shrink-0">
+            <Key className="w-6 h-6 text-[var(--sky)]" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-white tracking-tight">API Key Management</h2>
-            <p className="text-xs text-slate-400">Programmatic link creation authenticated via SHA-256 key hashing</p>
+            <h2 className="text-white text-[28px] sm:text-[32px]">API Key Management</h2>
+            <p className="text-[var(--mut)] text-xs sm:text-sm">
+              Programmatic link creation authenticated via SHA-256 key hashing
+            </p>
           </div>
         </div>
 
@@ -81,29 +80,29 @@ export const ApiKeysManager: React.FC = () => {
             setGeneratedKey(null);
             setShowCreateModal(true);
           }}
-          className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs transition-all flex items-center space-x-1.5 shadow-md shadow-emerald-500/20 active:scale-95"
+          className="luxe-go py-3 px-6 text-sm"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-4 h-4 mr-2" />
           <span>Create New API Key</span>
         </button>
       </div>
 
-      {/* Generated Key Alert Modal */}
+      {/* Generated Key Alert */}
       {generatedKey && (
-        <div className="p-5 rounded-2xl bg-amber-500/10 border-2 border-amber-500/30 text-amber-200 animate-fadeIn">
-          <div className="flex items-start space-x-3">
-            <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+        <div className="p-6 rounded-[24px] bg-[#f0b44c14] border-2 border-[#f0b44c55] text-[var(--amber)] animate-fadeIn">
+          <div className="flex items-start gap-4">
+            <AlertTriangle className="w-6 h-6 text-[var(--amber)] shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h4 className="text-sm font-bold text-white">Save Your API Key Now</h4>
-              <p className="text-xs text-amber-200/90 mt-0.5">
+              <h3 className="text-base font-bold text-white">Save Your API Key Now</h3>
+              <p className="text-xs text-[var(--mut)] mt-1">
                 We only store a SHA-256 cryptographic hash of this key. For security, you will never be able to view this secret token again.
               </p>
 
-              <div className="mt-3 flex items-center justify-between gap-2 p-3 bg-slate-950/90 border border-amber-500/30 rounded-xl font-mono text-xs text-emerald-400 select-all">
+              <div className="mt-4 flex items-center justify-between gap-3 p-3.5 bg-[var(--bg)] border border-[var(--line)] rounded-[16px] font-mono text-xs text-[var(--em)] select-all">
                 <span className="truncate">{generatedKey}</span>
                 <button
                   onClick={handleCopySecret}
-                  className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition-all flex items-center space-x-1 shrink-0 active:scale-95"
+                  className="luxe-btn py-1.5 px-4 text-xs font-bold text-[var(--em)] border-[#34d6a044]"
                 >
                   {copiedKey ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                   <span>{copiedKey ? 'Copied' : 'Copy Key'}</span>
@@ -114,77 +113,75 @@ export const ApiKeysManager: React.FC = () => {
         </div>
       )}
 
-      {/* Key List */}
-      <div className="glass-card rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
-        <div className="divide-y divide-slate-800">
-          {keys.map((k) => (
-            <div key={k.id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="space-y-1">
-                <div className="flex items-center space-x-2">
-                  <span className="font-semibold text-sm text-white">{k.name}</span>
-                  {k.revoked_at ? (
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 font-medium">
-                      Revoked
-                    </span>
-                  ) : (
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
-                      Active
-                    </span>
-                  )}
-                </div>
-                <div className="font-mono text-xs text-slate-400">{k.key_prefix}</div>
-                <div className="flex items-center space-x-3 text-[11px] text-slate-500">
-                  <span>Created {new Date(k.created_at).toLocaleDateString()}</span>
-                  {k.last_used && <span>• Last used recently</span>}
-                </div>
+      {/* Key List Rows: 20px x 26px padding, 16px gaps */}
+      <div className="grid gap-[16px]">
+        {keys.map((k) => (
+          <div key={k.id} className="luxe-row items-center">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-3">
+                <span className="font-semibold text-base text-white">{k.name}</span>
+                {k.revoked_at ? (
+                  <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-[8px] bg-rose-500/10 text-rose-400 border border-rose-500/20 font-medium">
+                    Revoked
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-[8px] bg-[#34d6a018] text-[var(--em)] border border-[#34d6a033] font-medium">
+                    Active
+                  </span>
+                )}
               </div>
-
-              {!k.revoked_at && (
-                <button
-                  onClick={() => handleRevoke(k.id)}
-                  className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold border border-rose-500/20 transition-all flex items-center space-x-1 self-start sm:self-auto"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Revoke Key</span>
-                </button>
-              )}
+              <div className="font-mono text-xs text-[var(--mut)]">{k.key_prefix}</div>
+              <div className="flex items-center gap-3 text-[12px] text-[var(--mut)] font-mono">
+                <span>Created {new Date(k.created_at).toLocaleDateString()}</span>
+                {k.last_used && <span>• Last used recently</span>}
+              </div>
             </div>
-          ))}
-        </div>
+
+            {!k.revoked_at && (
+              <button
+                onClick={() => handleRevoke(k.id)}
+                className="luxe-btn py-2 px-4 text-xs text-rose-400 border-rose-500/20 hover:border-rose-400"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Revoke Key</span>
+              </button>
+            )}
+          </div>
+        ))}
       </div>
 
       {/* Create Key Modal */}
       {showCreateModal && !generatedKey && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-md w-full shadow-2xl animate-scaleUp">
-            <h3 className="text-base font-bold text-white mb-1">Create API Key</h3>
-            <p className="text-xs text-slate-400 mb-4">Provide a recognizable label for this programmatic credential.</p>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="luxe-card p-7 sm:p-9 max-w-md w-full shadow-2xl animate-fadeIn">
+            <h2 className="text-white text-[24px] mb-1">Create API Key</h2>
+            <p className="text-xs text-[var(--mut)] mb-6">Provide a recognizable label for this programmatic credential.</p>
 
-            <form onSubmit={handleGenerate} className="space-y-4">
+            <form onSubmit={handleGenerate} className="space-y-5">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Key Description / Name</label>
+                <label className="block text-xs font-semibold text-[var(--tx)] mb-2 font-mono">Key Description / Name</label>
                 <input
                   type="text"
                   value={keyName}
                   onChange={(e) => setKeyName(e.target.value)}
                   placeholder="e.g. Production Microservice / Zapier Webhook"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full px-4 py-3 bg-[var(--bg)] border border-[var(--line)] rounded-[16px] text-xs text-white placeholder-[var(--mut)] outline-none focus:border-[var(--em)]"
                   autoFocus
                 />
               </div>
 
-              <div className="flex items-center justify-end space-x-2 pt-2">
+              <div className="flex items-center justify-end gap-3 pt-3">
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="px-3 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition-colors"
+                  className="luxe-btn py-2.5 px-5 text-xs font-semibold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={!keyName.trim()}
-                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs transition-all disabled:opacity-50"
+                  className="luxe-go py-2.5 px-6 text-xs font-bold disabled:opacity-50"
                 >
                   Generate Key
                 </button>

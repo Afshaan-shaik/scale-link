@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import { 
-  Link as LinkIcon, 
   Sparkles, 
   Copy, 
   Check, 
@@ -10,9 +9,7 @@ import {
   Clock, 
   ChevronDown, 
   ChevronUp, 
-  AlertCircle,
-  ShieldCheck,
-  Share2
+  AlertCircle
 } from 'lucide-react';
 import { Link, recordLinkClick } from '../api';
 import { sessionFetch } from '../session';
@@ -44,8 +41,8 @@ export const CreateLinkCard: React.FC<CreateLinkCardProps> = ({ onLinkCreated, o
         width: 256,
         margin: 2,
         color: {
-          dark: '#0f172a',
-          light: '#ffffff',
+          dark: '#07100e',
+          light: '#eaf3ef',
         },
       })
         .then((url) => setQrCodeUrl(url))
@@ -130,13 +127,11 @@ export const CreateLinkCard: React.FC<CreateLinkCardProps> = ({ onLinkCreated, o
         setCustomAlias('');
       } else {
         const errData = await res.json().catch(() => ({}));
-        // If backend returned error, display it, otherwise fall back to local interactive mode
         if (res.status === 409) {
           setError(`Alias '${customAlias}' is already taken. Please choose another.`);
         } else if (res.status === 400 && errData.error) {
           setError(errData.error);
         } else {
-          // If offline / local dev mode without active docker container, generate local link
           const code = customAlias.trim() || Math.random().toString(36).substring(2, 8);
           const newLink: Link = {
             id: Math.random().toString(),
@@ -161,7 +156,6 @@ export const CreateLinkCard: React.FC<CreateLinkCardProps> = ({ onLinkCreated, o
         }
       }
     } catch {
-      // Local fallback
       const code = customAlias.trim() || Math.random().toString(36).substring(2, 8);
       const newLink: Link = {
         id: Math.random().toString(),
@@ -190,140 +184,119 @@ export const CreateLinkCard: React.FC<CreateLinkCardProps> = ({ onLinkCreated, o
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
-      {/* Create Box */}
-      <div className="glass-card rounded-2xl p-6 sm:p-8 border border-slate-800 shadow-2xl relative">
-        <div className="flex items-center space-x-3 mb-6">
-          <div className="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-            <Sparkles className="w-5 h-5 text-emerald-400" />
-          </div>
+    <div className="luxe-create">
+      {/* Header section with icon and title */}
+      <div className="flex gap-[20px] items-center mb-[36px]">
+        <div className="w-[52px] h-[52px] rounded-[16px] bg-[var(--bg)] border border-[var(--line)] grid place-items-center shrink-0">
+          <svg viewBox="0 0 24 24" className="w-6 h-6 stroke-[var(--em)] fill-none stroke-[2]">
+            <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>
+          </svg>
+        </div>
+        <div>
+          <h2 className="text-white">Create short link</h2>
+          <p className="text-[var(--mut)] text-[15px]">
+            High-speed Base62 hash with SSRF protection and instant Redis caching
+          </p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-5 p-4 rounded-[16px] bg-[#f0b44c18] border border-[#f0b44c55] text-[var(--amber)] text-xs flex items-start space-x-2.5 animate-fadeIn">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
           <div>
-            <h2 className="text-xl font-bold text-white tracking-tight">Create Short Link</h2>
-            <p className="text-xs text-slate-400">High-speed Base62 hash with SSRF protection and instant Redis caching</p>
+            <p className="font-semibold">Creation Blocked</p>
+            <p className="mt-0.5 opacity-90">{error}</p>
           </div>
         </div>
+      )}
 
-        {error && (
-          <div className="mb-5 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start space-x-2.5 animate-fadeIn">
-            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-semibold">Creation Blocked</p>
-              <p className="mt-0.5 opacity-90">{error}</p>
-            </div>
-          </div>
-        )}
+      {/* Main input field with docked button inside */}
+      <form onSubmit={handleSubmit}>
+        <div className="luxe-field">
+          <input
+            type="text"
+            value={longUrl}
+            onChange={(e) => setLongUrl(e.target.value)}
+            placeholder="Paste long destination URL (e.g. https://github.com/scalelink/scalelink)…"
+            aria-label="Destination URL"
+          />
+          <button
+            type="submit"
+            disabled={loading || !longUrl.trim()}
+            className="luxe-go disabled:opacity-50"
+          >
+            {loading ? (
+              <span className="inline-block animate-spin mr-2">↻</span>
+            ) : null}
+            <span>Shorten</span>
+          </button>
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Main URL input */}
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-              <LinkIcon className="h-5 w-5 text-slate-400" />
-            </div>
-            <input
-              type="text"
-              value={longUrl}
-              onChange={(e) => setLongUrl(e.target.value)}
-              placeholder="Paste long destination URL (e.g. https://github.com/scalelink/scalelink)..."
-              className="w-full pl-11 pr-24 py-3.5 bg-slate-900/90 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm transition-all"
-            />
-            <button
-              type="submit"
-              disabled={loading || !longUrl.trim()}
-              className="absolute right-2 top-2 bottom-2 px-4 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold rounded-lg text-xs transition-all shadow-md shadow-emerald-500/20 flex items-center space-x-1.5 active:scale-95"
-            >
-              {loading ? (
-                <span className="inline-block animate-spin mr-1">↻</span>
-              ) : (
-                <Sparkles className="w-3.5 h-3.5" />
-              )}
-              <span>Shorten</span>
-            </button>
-          </div>
+        {/* Custom alias & expiration settings */}
+        <div className="mt-[28px]">
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="text-[var(--mut)] hover:text-white font-semibold text-[15px] flex items-center gap-1.5 transition-colors cursor-pointer select-none"
+          >
+            <span>Custom alias &amp; expiration settings</span>
+            {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
 
-          {/* Advanced toggle */}
-          <div className="pt-1">
-            <button
-              type="button"
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className="text-xs text-slate-400 hover:text-slate-200 flex items-center space-x-1.5 font-medium transition-colors"
-            >
-              <span>{showAdvanced ? 'Hide Custom Alias & Expiration' : 'Custom Alias & Expiration Settings'}</span>
-              {showAdvanced ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </button>
-          </div>
-
-          {/* Advanced Options Dropdown */}
           {showAdvanced && (
-            <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800 space-y-4 animate-fadeIn">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Custom Alias */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Custom Short Alias (Optional)
-                  </label>
-                  <div className="flex rounded-lg border border-slate-700 bg-slate-900 overflow-hidden focus-within:ring-2 focus-within:ring-emerald-500">
-                    <span className="px-2.5 py-2 text-xs text-slate-400 bg-slate-850 select-none border-r border-slate-700">
-                      /{window.location.host}/
-                    </span>
-                    <input
-                      type="text"
-                      value={customAlias}
-                      onChange={(e) => setCustomAlias(e.target.value.replace(/[^A-Za-z0-9_-]/g, ''))}
-                      placeholder="my-cool-link"
-                      maxLength={20}
-                      className="w-full px-3 py-2 bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none font-mono"
-                    />
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-1">3–20 alphanumeric chars, dashes, underscores</p>
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-[18px] mt-[22px] animate-fadeIn">
+              <div>
+                <input
+                  type="text"
+                  value={customAlias}
+                  onChange={(e) => setCustomAlias(e.target.value.replace(/[^A-Za-z0-9_-]/g, ''))}
+                  placeholder="Custom alias (optional)"
+                  maxLength={20}
+                  className="w-full bg-[var(--bg)] border border-[var(--line)] rounded-[16px] p-[14px_18px] text-[var(--tx)] font-medium text-[15px] outline-none focus:border-[var(--em)] focus:shadow-[0_0_0_5px_#34d6a018] transition-all"
+                />
+              </div>
 
-                {/* Expiry Selector */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center space-x-1">
-                    <Clock className="w-3 h-3 text-slate-400" />
-                    <span>Link Expiration TTL</span>
-                  </label>
-                  <select
-                    value={expiryOption}
-                    onChange={(e: any) => setExpiryOption(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="never">Never Expire (Permanent)</option>
-                    <option value="1h">1 Hour (Testing & Ephemeral)</option>
-                    <option value="24h">24 Hours (Daily Deals / OTP)</option>
-                    <option value="7d">7 Days</option>
-                    <option value="30d">30 Days</option>
-                  </select>
-                  <p className="text-[10px] text-slate-400 mt-1">Expired links return HTTP 410 Gone</p>
-                </div>
+              <div>
+                <select
+                  value={expiryOption}
+                  onChange={(e: any) => setExpiryOption(e.target.value)}
+                  aria-label="Expiration"
+                  className="w-full bg-[var(--bg)] border border-[var(--line)] rounded-[16px] p-[14px_18px] text-[var(--tx)] font-medium text-[15px] outline-none focus:border-[var(--em)] focus:shadow-[0_0_0_5px_#34d6a018] transition-all cursor-pointer"
+                >
+                  <option value="never" className="bg-[var(--bg2)] text-[var(--tx)]">Never Expire (Permanent)</option>
+                  <option value="1h" className="bg-[var(--bg2)] text-[var(--tx)]">1 Hour (Ephemeral)</option>
+                  <option value="24h" className="bg-[var(--bg2)] text-[var(--tx)]">24 Hours (Daily Deals)</option>
+                  <option value="7d" className="bg-[var(--bg2)] text-[var(--tx)]">7 Days</option>
+                  <option value="30d" className="bg-[var(--bg2)] text-[var(--tx)]">30 Days</option>
+                </select>
               </div>
             </div>
           )}
-        </form>
-      </div>
+        </div>
+      </form>
 
       {/* Newly Created Result Card */}
       {createdLink && (
-        <div className="mt-6 glass-card rounded-2xl p-6 border-2 border-emerald-500/40 shadow-2xl bg-gradient-to-b from-emerald-500/5 to-slate-900/90 animate-fadeIn">
-          <div className="flex items-center justify-between mb-3">
-            <span className="flex items-center space-x-1.5 text-xs font-bold text-emerald-400 uppercase tracking-wider">
-              <Check className="w-4 h-4 text-emerald-400" />
-              <span>Link Ready & Cached in Redis</span>
+        <div className="mt-8 border border-[var(--em)] rounded-[24px] p-6 bg-[var(--bg)] shadow-[0_0_0_4px_#34d6a014,0_24px_60px_-28px_var(--em)] animate-fadeIn">
+          <div className="flex items-center justify-between mb-4">
+            <span className="flex items-center space-x-1.5 text-xs font-bold text-[var(--em)] uppercase tracking-wider">
+              <Check className="w-4 h-4 text-[var(--em)]" />
+              <span>Link Ready &amp; Cached in Redis</span>
             </span>
-            <span className="text-[11px] text-slate-400 font-mono">Code: {createdLink.code}</span>
+            <span className="text-[12px] text-[var(--mut)] font-mono">Code: /{createdLink.code}</span>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
-            <div className="truncate font-mono text-emerald-300 text-sm font-semibold select-all">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-4 rounded-[18px] bg-[var(--bg2)] border border-[var(--line)]">
+            <div className="truncate font-mono text-[var(--em)] text-base font-semibold select-all">
               {createdLink.short_url}
             </div>
 
-            <div className="flex items-center space-x-2 shrink-0">
+            <div className="flex items-center space-x-2 shrink-0 flex-wrap gap-2">
               <button
                 onClick={copyToClipboard}
-                className="px-3 py-1.5 rounded-lg bg-emerald-500 text-slate-950 hover:bg-emerald-400 font-semibold text-xs transition-all flex items-center space-x-1.5 shadow-sm active:scale-95"
+                className="luxe-btn py-2 px-4 text-xs font-bold"
               >
-                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? <Check className="w-3.5 h-3.5 text-[var(--em)]" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copied ? 'Copied!' : 'Copy'}</span>
               </button>
 
@@ -336,11 +309,11 @@ export const CreateLinkCard: React.FC<CreateLinkCardProps> = ({ onLinkCreated, o
                   onLinkClick?.(createdLink.code);
                   fetch(`/api/links?code=${encodeURIComponent(createdLink.code)}&click=true`).catch(() => {});
                 }}
-                className="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 text-xs font-semibold transition-all flex items-center space-x-1.5 border border-emerald-500/40 shadow-sm"
+                className="luxe-btn py-2 px-4 text-xs font-bold text-[var(--em)] border-[#34d6a066]"
                 title="Test short link redirect"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                <span>Test Short Link (Redirects)</span>
+                <span>Test Link</span>
               </a>
 
               <a
@@ -352,16 +325,16 @@ export const CreateLinkCard: React.FC<CreateLinkCardProps> = ({ onLinkCreated, o
                   onLinkClick?.(createdLink.code);
                   fetch(`/api/links?code=${encodeURIComponent(createdLink.code)}&click=true`).catch(() => {});
                 }}
-                className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 text-xs font-semibold transition-all flex items-center space-x-1.5 border border-slate-700"
+                className="luxe-btn py-2 px-4 text-xs font-bold"
                 title="Open destination URL directly"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                <span>Direct Destination</span>
+                <span>Destination</span>
               </a>
 
               <button
                 onClick={() => setShowQrModal(!showQrModal)}
-                className="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors border border-slate-700"
+                className="luxe-btn p-2"
                 title="View QR Code"
               >
                 <QrCode className="w-4 h-4" />
@@ -369,18 +342,18 @@ export const CreateLinkCard: React.FC<CreateLinkCardProps> = ({ onLinkCreated, o
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-[var(--mut)]">
             <div className="truncate max-w-md">
-              <span className="text-slate-500">Destination:</span>{' '}
-              <a href={createdLink.long_url} target="_blank" rel="noreferrer" className="text-emerald-400 underline font-mono hover:text-emerald-300">
+              <span className="text-[var(--mut)]">Destination:</span>{' '}
+              <a href={createdLink.long_url} target="_blank" rel="noreferrer" className="text-[var(--em)] underline font-mono hover:text-white">
                 {createdLink.long_url}
               </a>
             </div>
             <div className="flex items-center space-x-3">
-              <span className="text-[11px] text-emerald-400 font-medium">✓ Saved in Inventory</span>
+              <span className="text-[12px] text-[var(--em)] font-medium">✓ Saved in Inventory</span>
               <button
                 onClick={() => onViewStats(createdLink.code)}
-                className="text-emerald-400 hover:text-emerald-300 font-medium flex items-center space-x-1 transition-colors"
+                className="text-[var(--em)] hover:underline font-semibold flex items-center space-x-1"
               >
                 <span>View Live Analytics →</span>
               </button>
@@ -389,10 +362,12 @@ export const CreateLinkCard: React.FC<CreateLinkCardProps> = ({ onLinkCreated, o
 
           {/* QR Code Popup */}
           {showQrModal && qrCodeUrl && (
-            <div className="mt-4 p-4 rounded-xl bg-white text-slate-900 flex flex-col items-center justify-center max-w-xs mx-auto shadow-2xl animate-fadeIn">
-              <img src={qrCodeUrl} alt="QR Code" className="w-48 h-48 rounded" />
-              <p className="mt-2 text-xs font-mono font-bold text-slate-700 text-center">{createdLink.short_url}</p>
-              <p className="text-[10px] text-slate-500 mt-0.5">Scan from phone on the same Wi-Fi</p>
+            <div className="mt-6 p-6 rounded-[24px] bg-[var(--bg2)] border border-[var(--line)] text-center max-w-xs mx-auto shadow-2xl animate-fadeIn">
+              <div className="p-3 bg-white rounded-[16px] inline-block shadow-md">
+                <img src={qrCodeUrl} alt="QR Code" className="w-44 h-44 rounded-[8px]" />
+              </div>
+              <p className="mt-3 text-xs font-mono font-bold text-[var(--em)] truncate">{createdLink.short_url}</p>
+              <p className="text-[11px] text-[var(--mut)] mt-1">Scan from your phone camera</p>
             </div>
           )}
         </div>

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
-import { WorkspaceBar } from './components/WorkspaceBar';
 import { RequestPathStrip } from './components/RequestPathStrip';
 import { CreateLinkCard } from './components/CreateLinkCard';
 import { MyLinksTable } from './components/MyLinksTable';
@@ -29,10 +28,7 @@ import { TransferWorkspaceModal } from './components/TransferWorkspaceModal';
 import { 
   Zap, 
   AlertTriangle, 
-  ArrowRight, 
-  ExternalLink, 
-  CheckCircle2,
-  Clock
+  ArrowRight
 } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -40,145 +36,127 @@ export const App: React.FC = () => {
   const pathname = window.location.pathname.replace(/^\/+/, '').split('/')[0];
   const isShortCode = Boolean(
     pathname &&
+    pathname !== 'api' &&
+    pathname !== 'health' &&
+    pathname !== 'metrics' &&
     pathname !== 'index.html' &&
-    !pathname.startsWith('@') &&
-    !pathname.includes('.') &&
-    !['api', 'health', 'metrics', 'src'].includes(pathname)
+    !pathname.includes('.')
   );
 
-  // If visiting a short URL directly by pathname, intercept and handle the real 302 redirect
   if (isShortCode) {
     return <RedirectHandler code={pathname} />;
-  }
-
-  // Also check query params ?r=XYZ, ?redirect_code=XYZ, or fallback from server ?error=not_found&code=XYZ
-  const params = new URLSearchParams(window.location.search);
-  const redirectParam = params.get('r') || params.get('redirect_code') || (params.get('error') === 'not_found' ? params.get('code') : null);
-  if (redirectParam) {
-    const stored = loadStoredLinks();
-    const found = stored.find((l) => l.code === redirectParam);
-    if (found && (!found.expires_at || new Date() <= new Date(found.expires_at))) {
-      return <RedirectHandler code={redirectParam} fallbackUrl={found.long_url} />;
-    }
   }
 
   return <DashboardApp />;
 };
 
-// ── Redirect Interceptor Component ───────────────────────────────────────────
-const RedirectHandler: React.FC<{ code: string; fallbackUrl?: string }> = ({ code, fallbackUrl }) => {
-  const [status, setStatus] = useState<'checking' | 'redirecting' | 'expired' | 'not_found'>('checking');
-  const [targetUrl, setTargetUrl] = useState<string>(fallbackUrl || '');
-  const [linkInfo, setLinkInfo] = useState<Link | null>(null);
+// ── Instant Redirect Component ───────────────────────────────────────────────
+const RedirectHandler: React.FC<{ code: string }> = ({ code }) => {
+  const [status, setStatus] = useState<'redirecting' | 'not_found' | 'expired'>('redirecting');
+  const [targetUrl, setTargetUrl] = useState<string>('');
+
+  const fallbackUrl =
+    code === 'gh-repo'
+      ? 'https://github.com/Afshaan-shaik/scale-link'
+      : code === 'demo'
+      ? 'https://google.com'
+      : '';
 
   useEffect(() => {
-    // 0. If fallback destination URL is provided directly from local inventory, forward immediately!
-    if (fallbackUrl) {
-      setTargetUrl(fallbackUrl);
-      setStatus('redirecting');
+    // 1. Check local session storage first
+    const stored = loadStoredLinks();
+    const localMatch = stored.find((l) => l.code === code);
+    if (localMatch) {
+      if (localMatch.is_expired) {
+        setStatus('expired');
+        return;
+      }
+      setTargetUrl(localMatch.long_url);
       recordLinkClick(code);
-      fetch(`/api/links?code=${encodeURIComponent(code)}&click=true`).catch(() => {});
-      fetch('/api/links/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ links: loadStoredLinks() }),
-      }).catch(() => {});
       const timer = setTimeout(() => {
-        window.location.replace(fallbackUrl);
-      }, 250);
+        window.location.replace(localMatch.long_url);
+      }, 180);
       return () => clearTimeout(timer);
     }
 
-    // 1. Check local storage first (instant synchronous lookup)
-    const result = recordLinkClick(code);
-
-    if (result.expired && result.link) {
-      setLinkInfo(result.link);
-      setStatus('expired');
-      return;
-    }
-
-    if (result.redirected && result.link) {
-      setLinkInfo(result.link);
-      setTargetUrl(result.link.long_url);
-      setStatus('redirecting');
-
-      // Sync click to backend asynchronously
-      fetch(`/api/links?code=${encodeURIComponent(code)}&click=true`).catch(() => {});
-      fetch('/api/links/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ links: loadStoredLinks() }),
-      }).catch(() => {});
-
-      // Forward browser to the destination URL
-      const timer = setTimeout(() => {
-        window.location.replace(result.link!.long_url);
-      }, 250);
-      return () => clearTimeout(timer);
-    }
-
-    // 2. Fallback to server API if not in local storage (e.g. new tab, incognito, or other device)
+    // 2. Fetch destination via public API
     fetch(`/api/links?code=${encodeURIComponent(code)}&click=true`)
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => {
+        if (res.status === 410) {
+          setStatus('expired');
+          return;
+        }
+        if (res.ok) {
+          return res.json();
+        }
+        throw new Error('Not found');
+      })
       .then((data) => {
-        if (data && data.link) {
-          const l: Link = data.link;
-          setLinkInfo(l);
-          if (l.expires_at && new Date() > new Date(l.expires_at)) {
+        if (data?.link?.long_url) {
+          const l = data.link;
+          if (l.is_expired) {
             setStatus('expired');
           } else {
             setTargetUrl(l.long_url);
-            setStatus('redirecting');
-
-            // Persist to local inventory for instant access
-            const current = loadStoredLinks();
-            if (!current.find((item) => item.code === l.code)) {
-              saveStoredLinks([l, ...current]);
-            }
-
+            recordLinkClick(code);
             const timer = setTimeout(() => {
               window.location.replace(l.long_url);
             }, 250);
             return () => clearTimeout(timer);
           }
+        } else if (fallbackUrl) {
+          setTargetUrl(fallbackUrl);
+          recordLinkClick(code);
+          const timer = setTimeout(() => {
+            window.location.replace(fallbackUrl);
+          }, 250);
+          return () => clearTimeout(timer);
         } else {
           setStatus('not_found');
         }
       })
       .catch(() => {
-        setStatus('not_found');
+        if (fallbackUrl) {
+          setTargetUrl(fallbackUrl);
+          recordLinkClick(code);
+          const timer = setTimeout(() => {
+            window.location.replace(fallbackUrl);
+          }, 250);
+          return () => clearTimeout(timer);
+        } else {
+          setStatus('not_found');
+        }
       });
   }, [code, fallbackUrl]);
 
   if (status === 'redirecting') {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center font-sans">
-        <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mb-6 shadow-xl shadow-emerald-500/10 animate-bounce">
-          <Zap className="w-8 h-8 text-emerald-400" />
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center font-sans">
+        <div className="w-16 h-16 rounded-[20px] bg-[#34d6a018] border border-[#34d6a033] text-[var(--em)] flex items-center justify-center mb-6 shadow-xl animate-bounce">
+          <Zap className="w-8 h-8" />
         </div>
-        <div className="flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-mono font-bold mb-4 border border-emerald-500/30">
+        <div className="flex items-center space-x-2 px-4 py-1.5 rounded-full bg-[#34d6a018] text-[var(--em)] text-xs font-mono font-bold mb-4 border border-[#34d6a033]">
           <span>HTTP 302 Found</span>
           <span>•</span>
           <span>X-Cache: HIT (1.8ms)</span>
           <span>•</span>
           <span>X-Served-By: redis</span>
         </div>
-        <h1 className="text-2xl font-extrabold text-white mb-2">Redirecting to Destination...</h1>
-        <p className="text-sm font-mono text-emerald-300 max-w-lg truncate mb-6 bg-slate-900/90 px-4 py-2.5 rounded-xl border border-slate-800 shadow-inner">
+        <h1 className="text-3xl text-white mb-2">Redirecting to Destination…</h1>
+        <p className="text-sm font-mono text-[var(--em)] max-w-lg truncate mb-6 bg-[var(--bg2)] px-5 py-3 rounded-[16px] border border-[var(--line)] shadow-inner">
           {targetUrl}
         </p>
         <div className="flex items-center space-x-3">
           <a
             href={targetUrl}
-            className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20 flex items-center space-x-2 active:scale-95"
+            className="luxe-go py-2.5 px-6 text-xs flex items-center space-x-2"
           >
             <span>Proceed Immediately</span>
-            <ArrowRight className="w-4 h-4" />
+            <ArrowRight className="w-4 h-4 ml-1" />
           </a>
           <a
             href="/"
-            className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl text-xs font-semibold transition-all border border-slate-800"
+            className="luxe-btn py-2.5 px-5 text-xs font-semibold"
           >
             Dashboard
           </a>
@@ -189,20 +167,20 @@ const RedirectHandler: React.FC<{ code: string; fallbackUrl?: string }> = ({ cod
 
   if (status === 'expired') {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center font-sans">
-        <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center mb-6 shadow-xl shadow-rose-500/10">
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center font-sans">
+        <div className="w-16 h-16 rounded-[20px] bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center mb-6 shadow-xl">
           <AlertTriangle className="w-8 h-8 text-rose-400" />
         </div>
-        <div className="px-3 py-1 rounded-full bg-rose-500/20 text-rose-400 text-xs font-mono font-bold mb-4 border border-rose-500/30">
+        <div className="px-4 py-1 rounded-full bg-rose-500/20 text-rose-400 text-xs font-mono font-bold mb-4 border border-rose-500/30">
           HTTP 410 Gone
         </div>
-        <h1 className="text-2xl font-bold text-white mb-2">This short link has expired</h1>
-        <p className="text-sm text-slate-400 max-w-md mb-6 leading-relaxed">
-          The link <span className="font-mono text-slate-200">/{code}</span> was configured with an expiration TTL which has now passed.
+        <h1 className="text-3xl text-white mb-2">This short link has expired</h1>
+        <p className="text-sm text-[var(--mut)] max-w-md mb-6 leading-relaxed">
+          The link <span className="font-mono text-white">/{code}</span> was configured with an expiration TTL which has now passed.
         </p>
         <a
           href="/"
-          className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-all border border-slate-700"
+          className="luxe-btn py-2.5 px-6 text-xs font-bold"
         >
           Return to Dashboard
         </a>
@@ -212,20 +190,20 @@ const RedirectHandler: React.FC<{ code: string; fallbackUrl?: string }> = ({ cod
 
   if (status === 'not_found') {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center font-sans">
-        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mb-6">
-          <AlertTriangle className="w-8 h-8 text-amber-400" />
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center font-sans">
+        <div className="w-16 h-16 rounded-[20px] bg-[#f0b44c18] border border-[#f0b44c33] text-[var(--amber)] flex items-center justify-center mb-6">
+          <AlertTriangle className="w-8 h-8" />
         </div>
-        <div className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 text-xs font-mono font-bold mb-4 border border-amber-500/30">
+        <div className="px-4 py-1 rounded-full bg-[#f0b44c18] text-[var(--amber)] text-xs font-mono font-bold mb-4 border border-[#f0b44c33]">
           HTTP 404 Not Found
         </div>
-        <h1 className="text-2xl font-bold text-white mb-2">Short Link Not Found</h1>
-        <p className="text-sm text-slate-400 max-w-md mb-6">
-          No destination mapping exists for code <span className="font-mono text-slate-200">/{code}</span>.
+        <h1 className="text-3xl text-white mb-2">Short Link Not Found</h1>
+        <p className="text-sm text-[var(--mut)] max-w-md mb-6">
+          No destination mapping exists for code <span className="font-mono text-white">/{code}</span>.
         </p>
         <a
           href="/"
-          className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-500/20"
+          className="luxe-go py-2.5 px-6 text-xs"
         >
           Create Short Link
         </a>
@@ -234,8 +212,8 @@ const RedirectHandler: React.FC<{ code: string; fallbackUrl?: string }> = ({ cod
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400 text-xs font-mono">
-      Looking up short link...
+    <div className="min-h-screen flex items-center justify-center text-[var(--mut)] text-xs font-mono">
+      Looking up short link…
     </div>
   );
 };
@@ -364,7 +342,6 @@ const DashboardApp: React.FC = () => {
       devices: [{ device_type: 'desktop', count: 0 }],
       referrers: [{ referrer: 'direct', count: 0 }],
     };
-
     const updatedStats = { ...statsMap, [newLink.code]: newStats };
     setStatsMap(updatedStats);
     saveStoredStats(updatedStats);
@@ -378,13 +355,11 @@ const DashboardApp: React.FC = () => {
   };
 
   const handleStartNewWorkspace = async () => {
-    if (window.confirm('Start a fresh anonymous workspace for this tab? You will receive a clean workspace.')) {
-      const newSess = await startNewWorkspace();
-      setWorkspaceId(newSess.workspaceId);
-      setLinks([]);
-      saveStoredLinks([]);
-      setSelectedCode('');
-    }
+    const fresh = await startNewWorkspace();
+    setWorkspaceId(fresh.workspaceId);
+    setLinks([]);
+    saveStoredLinks([]);
+    setSelectedCode('gh-repo');
   };
 
   const handleViewStats = (code: string) => {
@@ -409,27 +384,22 @@ const DashboardApp: React.FC = () => {
   });
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      {/* Navigation Header - Spacious & Clean */}
+    <div className="wrap">
+      {/* Navigation Header matching Preview HTML exactly */}
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         linksCount={links.length}
-      />
-
-      {/* Anonymous Workspace Bar - Down from the header with ample breathing room */}
-      <WorkspaceBar
         workspaceId={workspaceId}
-        linksCount={links.length}
         onTransferWorkspace={() => setIsTransferModalOpen(true)}
         onStartNewWorkspace={handleStartNewWorkspace}
       />
 
       {urlNotice && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 w-full">
-          <div className="bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs px-4 py-3 rounded-xl flex items-center justify-between">
+        <div className="pt-4 w-full">
+          <div className="bg-[#f0b44c18] border border-[#f0b44c55] text-[var(--amber)] text-xs px-5 py-3.5 rounded-[20px] flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <AlertTriangle className="w-4 h-4 text-[var(--amber)] shrink-0" />
               <span>{urlNotice}</span>
             </div>
             <button
@@ -437,7 +407,7 @@ const DashboardApp: React.FC = () => {
                 setUrlNotice(null);
                 window.history.replaceState({}, '', '/');
               }}
-              className="text-amber-400 hover:text-white text-xs font-semibold px-2 py-0.5 rounded"
+              className="text-[var(--amber)] hover:text-white text-xs font-semibold px-2 py-0.5 rounded"
             >
               ✕
             </button>
@@ -445,14 +415,14 @@ const DashboardApp: React.FC = () => {
         </div>
       )}
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Request-Path Strip showing Cache-Aside & Pipeline */}
-        <RequestPathStrip lastEvent={lastEvent} />
-
-        {/* Tab Content */}
+      {/* Main Tab Panels - 56px top padding, 120px bottom padding */}
+      <main>
         {activeTab === 'shorten' && (
-          <div className="space-y-10 animate-fadeIn">
+          <section className="luxe-panel space-y-12">
+            {/* Real-Time Request Pipeline & Cache-Aside Strip (Hero Card) */}
+            <RequestPathStrip lastEvent={lastEvent} />
+
+            {/* Create Short Link Card */}
             <CreateLinkCard
               onLinkCreated={handleLinkCreated}
               onViewStats={handleViewStats}
@@ -460,15 +430,15 @@ const DashboardApp: React.FC = () => {
             />
 
             {/* Quick Preview of Recent Links in Inventory */}
-            <div className="pt-6 border-t border-slate-800/80">
-              <div className="flex items-center justify-between mb-4">
+            <div className="pt-10 border-t border-[var(--line)]">
+              <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h3 className="font-bold text-base text-white">Your Links Inventory</h3>
-                  <p className="text-xs text-slate-400">All links created are persisted and active</p>
+                  <h3 className="text-xl font-bold text-white">Your Links Inventory</h3>
+                  <p className="text-xs text-[var(--mut)]">All links created are persisted and active</p>
                 </div>
                 <button
                   onClick={() => setActiveTab('links')}
-                  className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
+                  className="text-xs font-semibold text-[var(--em)] hover:underline transition-colors"
                 >
                   View All ({links.length}) →
                 </button>
@@ -484,11 +454,11 @@ const DashboardApp: React.FC = () => {
                 onStartNewWorkspace={handleStartNewWorkspace}
               />
             </div>
-          </div>
+          </section>
         )}
 
         {activeTab === 'links' && (
-          <div className="animate-fadeIn">
+          <section className="luxe-panel">
             <MyLinksTable
               links={links}
               onDeleteLink={handleDeleteLink}
@@ -499,42 +469,42 @@ const DashboardApp: React.FC = () => {
               onTransferWorkspace={() => setIsTransferModalOpen(true)}
               onStartNewWorkspace={handleStartNewWorkspace}
             />
-          </div>
+          </section>
         )}
 
         {activeTab === 'analytics' && (
-          <div className="animate-fadeIn">
+          <section className="luxe-panel">
             <AnalyticsDashboard
               links={links}
               selectedCode={selectedCode}
               onSelectCode={setSelectedCode}
               stats={statsMap[selectedCode] || null}
             />
-          </div>
+          </section>
         )}
 
         {activeTab === 'ratelimit' && (
-          <div className="animate-fadeIn">
+          <section className="luxe-panel">
             <TokenBucketMeter />
-          </div>
+          </section>
         )}
 
         {activeTab === 'keys' && (
-          <div className="animate-fadeIn">
+          <section className="luxe-panel">
             <ApiKeysManager />
-          </div>
+          </section>
         )}
 
         {activeTab === 'system' && (
-          <div className="animate-fadeIn">
+          <section className="luxe-panel">
             <SystemHealth />
-          </div>
+          </section>
         )}
 
         {activeTab === 'observability' && (
-          <div className="animate-fadeIn">
+          <section className="luxe-panel">
             <ObservabilityDashboard />
-          </div>
+          </section>
         )}
       </main>
 
@@ -546,14 +516,14 @@ const DashboardApp: React.FC = () => {
       />
 
       {/* Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950 py-6 mt-12 text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <footer className="border-t border-[var(--line)] py-10 mt-20 text-xs text-[var(--mut)]">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center space-x-2">
-            <span className="font-bold text-slate-300">ScaleLink</span>
+            <span className="font-bold text-white">ScaleLink</span>
             <span>• Production URL Shortener with Async Redis Streams Analytics</span>
           </div>
 
-          <div className="flex items-center space-x-6 text-slate-400 font-mono text-[11px]">
+          <div className="flex items-center space-x-6 text-[var(--mut)] font-mono text-[11px]">
             <span>Go 1.22</span>
             <span>Redis 7</span>
             <span>PostgreSQL 16</span>

@@ -141,15 +141,24 @@ func main() {
 		r.With(middleware.OptionalAuth(authSvc)).
 			Get("/{code}/stats", linkH.GetStats)
 
+		// Public resolver
+		r.Get("/resolve/{code}", linkH.ResolvePublic)
+
+		// Public or authenticated link listing
+		r.With(middleware.OptionalAuth(authSvc)).
+			Get("/", linkH.ListLinks)
+
 		// Authenticated link management
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.AuthRequired(authSvc))
-			r.Get("/",        linkH.ListLinks)
 			r.Get("/{code}",  linkH.GetLink)
 			r.Patch("/{id}",  linkH.UpdateLink)
 			r.Delete("/{id}", linkH.DeleteLink)
 		})
 	})
+
+	// Direct redirect route via /api/r/{code}
+	r.Get("/api/r/{code}", linkH.Redirect)
 
 	// API Keys
 	r.Route("/api/keys", func(r chi.Router) {

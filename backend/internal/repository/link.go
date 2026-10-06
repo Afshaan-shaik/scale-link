@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"sync"
 
 	"github.com/scalelink/scalelink/internal/model"
 )
@@ -121,6 +122,19 @@ func (r *LinkRepository) GetByCode(ctx context.Context, code string) (*model.Lin
 
 // GetByID fetches a link by its UUID, including soft-deleted.
 func (r *LinkRepository) GetByID(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*model.Link, error) {
+	if r.pool == nil {
+		ensureMemLinks()
+		memLinksMu.RLock()
+		defer memLinksMu.RUnlock()
+		for _, l := range memLinks {
+			if l.ID == id && (l.UserID == nil || *l.UserID == userID) {
+				copy := *l
+				return &copy, nil
+			}
+		}
+		return nil, ErrNotFound
+	}
+
 	query := `
 		SELECT id, code, long_url, user_id, expires_at, created_at, updated_at, deleted_at, click_count, is_custom
 		FROM   links
@@ -143,6 +157,22 @@ func (r *LinkRepository) GetByID(ctx context.Context, id uuid.UUID, userID uuid.
 
 // ListByUser returns paginated links for a user, newest first.
 func (r *LinkRepository) ListByUser(ctx context.Context, userID uuid.UUID, limit, offset int, search string) ([]*model.Link, int, error) {
+	if r.pool == nil {
+		ensureMemLinks()
+		memLinksMu.RLock()
+		defer memLinksMu.RUnlock()
+		var res []*model.Link
+		for _, l := range memLinks {
+			if l.DeletedAt == nil && (l.UserID == nil || *l.UserID == userID) {
+				if search == "" || strings.Contains(strings.ToLower(l.LongURL), strings.ToLower(search)) || strings.Contains(strings.ToLower(l.Code), strings.ToLower(search)) {
+					copy := *l
+					res = append(res, &copy)
+				}
+			}
+		}
+		return res, len(res), nil
+	}
+
 	baseWhere := `WHERE user_id = $1 AND deleted_at IS NULL`
 	args := []any{userID}
 	argIdx := 2
@@ -192,6 +222,20 @@ func (r *LinkRepository) ListByUser(ctx context.Context, userID uuid.UUID, limit
 // UpdateExpiry allows changing the expiry time of a link.
 // Returns ErrNotFound if the link doesn't belong to the user.
 func (r *LinkRepository) UpdateExpiry(ctx context.Context, id uuid.UUID, userID uuid.UUID, expiresAt *time.Time) (string, error) {
+	if r.pool == nil {
+		ensureMemLinks()
+		memLinksMu.Lock()
+		defer memLinksMu.Unlock()
+		for _, l := range memLinks {
+			if l.ID == id {
+				l.ExpiresAt = expiresAt
+				l.UpdatedAt = time.Now()
+				return l.Code, nil
+			}
+		}
+		return "", ErrNotFound
+	}
+
 	query := `
 		UPDATE links SET expires_at = $1, updated_at = NOW()
 		WHERE id = $2 AND user_id = $3 AND deleted_at IS NULL
@@ -210,6 +254,21 @@ func (r *LinkRepository) UpdateExpiry(ctx context.Context, id uuid.UUID, userID 
 
 // SoftDelete marks a link as deleted and returns its short code.
 func (r *LinkRepository) SoftDelete(ctx context.Context, id uuid.UUID, userID uuid.UUID) (string, error) {
+	if r.pool == nil {
+		ensureMemLinks()
+		memLinksMu.Lock()
+		defer memLinksMu.Unlock()
+		for _, l := range memLinks {
+			if l.ID == id {
+				now := time.Now()
+				l.DeletedAt = &now
+				l.UpdatedAt = now
+				return l.Code, nil
+			}
+		}
+		return "", ErrNotFound
+	}
+
 	query := `
 		UPDATE links SET deleted_at = NOW(), updated_at = NOW()
 		WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
@@ -228,6 +287,16 @@ func (r *LinkRepository) SoftDelete(ctx context.Context, id uuid.UUID, userID uu
 
 // IncrementClickCount atomically increments a link's click counter.
 func (r *LinkRepository) IncrementClickCount(ctx context.Context, code string, n int64) error {
+	if r.pool == nil {
+		ensureMemLinks()
+		memLinksMu.Lock()
+		defer memLinksMu.Unlock()
+		if l, ok := memLinks[code]; ok {
+			l.ClickCount += n
+		}
+		return nil
+	}
+
 	_, err := r.pool.Exec(ctx,
 		`UPDATE links SET click_count = click_count + $1 WHERE code = $2`,
 		n, code,
@@ -237,6 +306,14 @@ func (r *LinkRepository) IncrementClickCount(ctx context.Context, code string, n
 
 // CodeExists reports whether a code is already taken (including deleted links).
 func (r *LinkRepository) CodeExists(ctx context.Context, code string) (bool, error) {
+	if r.pool == nil {
+		ensureMemLinks()
+		memLinksMu.RLock()
+		defer memLinksMu.RUnlock()
+		_, exists := memLinks[code]
+		return exists, nil
+	}
+
 	var exists bool
 	err := r.pool.QueryRow(ctx,
 		`SELECT EXISTS(SELECT 1 FROM links WHERE code = $1)`, code,

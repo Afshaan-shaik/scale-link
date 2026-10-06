@@ -263,8 +263,29 @@ type linkSummary struct {
 	IsExpired  bool       `json:"is_expired"`
 }
 
-// ListLinks handles GET /api/links (auth required)
+// ListLinks handles GET /api/links (optional code query or auth required for user list)
 func (h *LinkHandler) ListLinks(w http.ResponseWriter, r *http.Request) {
+	baseURL := r.Header.Get("X-Base-URL")
+	if baseURL == "" {
+		baseURL = fmt.Sprintf("%s://%s", scheme(r), r.Host)
+	}
+
+	q := r.URL.Query()
+	if code := q.Get("code"); code != "" {
+		link, err := h.linkSvc.Resolve(r.Context(), code)
+		if err != nil {
+			respondError(w, http.StatusNotFound, "link not found")
+			return
+		}
+		if q.Get("click") == "true" {
+			h.publishClick(r, code)
+		}
+		respond(w, http.StatusOK, map[string]interface{}{
+			"link": toLinkSummary(link, baseURL),
+		})
+		return
+	}
+
 	claims, ok := middleware.ClaimsFromContext(r.Context())
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "authentication required")
@@ -276,7 +297,6 @@ func (h *LinkHandler) ListLinks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	q := r.URL.Query()
 	limit := parseInt(q.Get("limit"), 20)
 	offset := parseInt(q.Get("offset"), 0)
 	search := q.Get("q")
@@ -291,12 +311,6 @@ func (h *LinkHandler) ListLinks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build base URL for short URLs
-	baseURL := r.Header.Get("X-Base-URL")
-	if baseURL == "" {
-		baseURL = fmt.Sprintf("%s://%s", scheme(r), r.Host)
-	}
-
 	summaries := make([]*linkSummary, 0, len(links))
 	for _, l := range links {
 		summaries = append(summaries, toLinkSummary(l, baseURL))
@@ -307,6 +321,26 @@ func (h *LinkHandler) ListLinks(w http.ResponseWriter, r *http.Request) {
 		Total:  total,
 		Limit:  limit,
 		Offset: offset,
+	})
+}
+
+// ResolvePublic handles public GET /api/links/resolve/{code}
+func (h *LinkHandler) ResolvePublic(w http.ResponseWriter, r *http.Request) {
+	code := chi.URLParam(r, "code")
+	link, err := h.linkSvc.Resolve(r.Context(), code)
+	if err != nil {
+		respondError(w, http.StatusNotFound, "link not found")
+		return
+	}
+	baseURL := r.Header.Get("X-Base-URL")
+	if baseURL == "" {
+		baseURL = fmt.Sprintf("%s://%s", scheme(r), r.Host)
+	}
+	if r.URL.Query().Get("click") == "true" {
+		h.publishClick(r, code)
+	}
+	respond(w, http.StatusOK, map[string]interface{}{
+		"link": toLinkSummary(link, baseURL),
 	})
 }
 

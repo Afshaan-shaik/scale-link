@@ -153,7 +153,7 @@ func (r *StatsRepository) GetStats(ctx context.Context, code string, from, to ti
 
 // InsertClickEvents bulk-inserts a batch of click events using pgx batch.
 func (r *StatsRepository) InsertClickEvents(ctx context.Context, events []*model.ClickEvent) error {
-	if len(events) == 0 {
+	if r.pool == nil || len(events) == 0 {
 		return nil
 	}
 
@@ -179,7 +179,7 @@ func (r *StatsRepository) InsertClickEvents(ctx context.Context, events []*model
 
 // RecordClickBatch atomically inserts click events and increments links.click_count in a single transaction.
 func (r *StatsRepository) RecordClickBatch(ctx context.Context, events []*model.ClickEvent, codeCounts map[string]int64) error {
-	if len(events) == 0 && len(codeCounts) == 0 {
+	if r.pool == nil || (len(events) == 0 && len(codeCounts) == 0) {
 		return nil
 	}
 

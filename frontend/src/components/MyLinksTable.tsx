@@ -38,6 +38,11 @@ export const MyLinksTable: React.FC<MyLinksTableProps> = ({
     recordLinkClick(code);
     onLinkClick?.(code);
     fetch(`/api/links?code=${encodeURIComponent(code)}&click=true`).catch(() => {});
+    fetch('/api/links/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ links: [links.find((l) => l.code === code)].filter(Boolean) }),
+    }).catch(() => {});
   };
 
   const filteredLinks = links.filter(
@@ -117,9 +122,16 @@ export const MyLinksTable: React.FC<MyLinksTableProps> = ({
                   {/* Left: Code, Long URL, metadata */}
                   <div className="space-y-1.5 min-w-0 flex-1">
                     <div className="flex items-center space-x-2.5">
-                      <span className="font-mono text-sm font-bold text-emerald-400 hover:underline cursor-pointer" onClick={() => onViewStats(link.code)}>
+                      <a
+                        href={link.short_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => handleLinkOpen(link.code)}
+                        className="font-mono text-sm font-bold text-emerald-400 hover:underline cursor-pointer"
+                        title={`Short link: ${link.short_url}`}
+                      >
                         /{link.code}
-                      </span>
+                      </a>
                       {link.is_custom && (
                         <span className="text-[10px] px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 font-medium">
                           Custom Alias
@@ -137,10 +149,18 @@ export const MyLinksTable: React.FC<MyLinksTableProps> = ({
                       )}
                     </div>
 
-                    {/* Long URL */}
-                    <p className="text-xs text-slate-400 truncate max-w-xl font-mono" title={link.long_url}>
-                      {link.long_url}
-                    </p>
+                    {/* Destination Long URL: Direct clickable destination */}
+                    <a
+                      href={link.long_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => handleLinkOpen(link.code)}
+                      className="text-xs text-slate-300 hover:text-emerald-400 truncate max-w-xl font-mono flex items-center space-x-1.5 transition-colors group cursor-pointer"
+                      title={`Open destination: ${link.long_url}`}
+                    >
+                      <span className="truncate group-hover:underline">{link.long_url}</span>
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-400 shrink-0 inline ml-1 transition-colors" />
+                    </a>
 
                     {/* Timestamps */}
                     <div className="flex items-center space-x-4 text-[11px] text-slate-500">
@@ -181,13 +201,14 @@ export const MyLinksTable: React.FC<MyLinksTableProps> = ({
                         {isCopied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                       </button>
 
+                      {/* Open Destination in new tab */}
                       <a
-                        href={link.short_url}
+                        href={link.long_url}
                         target="_blank"
                         rel="noreferrer"
                         onClick={() => handleLinkOpen(link.code)}
-                        className="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors border border-slate-700/60"
-                        title="Open short link"
+                        className="p-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 transition-colors border border-emerald-500/30"
+                        title="Open destination in new tab"
                       >
                         <ExternalLink className="w-4 h-4" />
                       </a>
@@ -202,7 +223,7 @@ export const MyLinksTable: React.FC<MyLinksTableProps> = ({
 
                       <button
                         onClick={() => onViewStats(link.code)}
-                        className="p-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 transition-colors border border-emerald-500/30"
+                        className="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors border border-slate-700/60"
                         title="Analytics"
                       >
                         <BarChart2 className="w-4 h-4" />

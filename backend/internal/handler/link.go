@@ -189,7 +189,7 @@ func (h *LinkHandler) Redirect(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-Cache", "MISS")
 			w.Header().Set("X-Served-By", "db")
 			if strings.Contains(r.Header.Get("Accept"), "text/html") {
-				http.Redirect(w, r, "/?error=not_found&code="+code, http.StatusFound)
+				http.Redirect(w, r, "/?r="+code, http.StatusFound)
 				return
 			}
 			respondError(w, http.StatusNotFound, fmt.Sprintf("short code %q not found", code))
@@ -547,6 +547,54 @@ func toLinkSummary(l *model.Link, baseURL string) *linkSummary {
 		IsCustom:   l.IsCustom,
 		IsExpired:  l.IsExpired(),
 	}
+}
+
+type syncLinksRequest struct {
+	Links []struct {
+		ID         string     `json:"id"`
+		Code       string     `json:"code"`
+		LongURL    string     `json:"long_url"`
+		ClickCount int64      `json:"click_count"`
+		ExpiresAt  *time.Time `json:"expires_at"`
+		IsCustom   bool       `json:"is_custom"`
+	} `json:"links"`
+}
+
+// SyncLinks handles POST /api/links/sync
+func (h *LinkHandler) SyncLinks(w http.ResponseWriter, r *http.Request) {
+	var req syncLinksRequest
+	if err := decode(r, &req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	models := make([]*model.Link, 0, len(req.Links))
+	for _, l := range req.Links {
+		if l.Code == "" || l.LongURL == "" {
+			continue
+		}
+		var parsedID uuid.UUID
+		if l.ID != "" {
+			parsedID, _ = uuid.Parse(l.ID)
+		}
+		if parsedID == uuid.Nil {
+			parsedID = uuid.New()
+		}
+		models = append(models, &model.Link{
+			ID:         parsedID,
+			Code:       l.Code,
+			LongURL:    l.LongURL,
+			ClickCount: l.ClickCount,
+			ExpiresAt:  l.ExpiresAt,
+			IsCustom:   l.IsCustom,
+		})
+	}
+
+	_ = h.linkSvc.SyncLinks(r.Context(), models)
+	respond(w, http.StatusOK, map[string]interface{}{
+		"status": "ok",
+		"synced": len(models),
+	})
 }
 
 func parseInt(s string, def int) int {

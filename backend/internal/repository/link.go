@@ -2,8 +2,11 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +24,32 @@ var (
 	memLinksMu   sync.RWMutex
 )
 
+func loadMemCache() {
+	tmpDir := os.TempDir()
+	cachePath := filepath.Join(tmpDir, "scalelink_mem_cache.json")
+	data, err := os.ReadFile(cachePath)
+	if err != nil {
+		return
+	}
+	var cached map[string]*model.Link
+	if err := json.Unmarshal(data, &cached); err == nil {
+		for k, v := range cached {
+			if _, exists := memLinks[k]; !exists {
+				memLinks[k] = v
+			}
+		}
+	}
+}
+
+func saveMemCache() {
+	tmpDir := os.TempDir()
+	cachePath := filepath.Join(tmpDir, "scalelink_mem_cache.json")
+	data, err := json.Marshal(memLinks)
+	if err == nil {
+		_ = os.WriteFile(cachePath, data, 0644)
+	}
+}
+
 func ensureMemLinks() {
 	memLinksOnce.Do(func() {
 		now := time.Now()
@@ -33,6 +62,7 @@ func ensureMemLinks() {
 			UpdatedAt:  now.Add(-5 * 24 * time.Hour),
 			IsCustom:   true,
 		}
+		loadMemCache()
 	})
 }
 
@@ -52,6 +82,39 @@ func NewLinkRepository(pool *pgxpool.Pool) *LinkRepository {
 	return &LinkRepository{pool: pool}
 }
 
+// SyncMemLinks merges incoming links into memLinks and updates click counts.
+func (r *LinkRepository) SyncMemLinks(links []*model.Link) {
+	ensureMemLinks()
+	memLinksMu.Lock()
+	defer memLinksMu.Unlock()
+	for _, l := range links {
+		if l == nil || l.Code == "" {
+			continue
+		}
+		if existing, ok := memLinks[l.Code]; ok {
+			if l.ClickCount > existing.ClickCount {
+				existing.ClickCount = l.ClickCount
+			}
+			if existing.LongURL == "" && l.LongURL != "" {
+				existing.LongURL = l.LongURL
+			}
+		} else {
+			if l.ID == uuid.Nil {
+				l.ID = uuid.New()
+			}
+			now := time.Now()
+			if l.CreatedAt.IsZero() {
+				l.CreatedAt = now
+			}
+			if l.UpdatedAt.IsZero() {
+				l.UpdatedAt = now
+			}
+			memLinks[l.Code] = l
+		}
+	}
+	saveMemCache()
+}
+
 // Create inserts a new link. Returns ErrConflict if the code is already taken.
 func (r *LinkRepository) Create(ctx context.Context, link *model.Link) error {
 	if r.pool == nil {
@@ -64,6 +127,7 @@ func (r *LinkRepository) Create(ctx context.Context, link *model.Link) error {
 		link.CreatedAt = time.Now()
 		link.UpdatedAt = time.Now()
 		memLinks[link.Code] = link
+		saveMemCache()
 		return nil
 	}
 
@@ -339,6 +403,7 @@ func (r *LinkRepository) IncrementClickCount(ctx context.Context, code string, n
 		defer memLinksMu.Unlock()
 		if l, ok := memLinks[code]; ok {
 			l.ClickCount += n
+			saveMemCache()
 		}
 		return nil
 	}

@@ -109,6 +109,11 @@ export const CreateLinkCard: React.FC<CreateLinkCardProps> = ({ onLinkCreated, o
         };
         setCreatedLink(newLink);
         onLinkCreated(newLink);
+        fetch('/api/links/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ links: [newLink] }),
+        }).catch(() => {});
         setLongUrl('');
         setCustomAlias('');
       } else {
@@ -134,6 +139,11 @@ export const CreateLinkCard: React.FC<CreateLinkCardProps> = ({ onLinkCreated, o
           };
           setCreatedLink(newLink);
           onLinkCreated(newLink);
+          fetch('/api/links/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ links: [newLink] }),
+          }).catch(() => {});
           setLongUrl('');
           setCustomAlias('');
         }
@@ -325,6 +335,11 @@ export const CreateLinkCard: React.FC<CreateLinkCardProps> = ({ onLinkCreated, o
                 href={createdLink.long_url}
                 target="_blank"
                 rel="noreferrer"
+                onClick={() => {
+                  recordLinkClick(createdLink.code);
+                  onLinkClick?.(createdLink.code);
+                  fetch(`/api/links?code=${encodeURIComponent(createdLink.code)}&click=true`).catch(() => {});
+                }}
                 className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 text-xs font-semibold transition-all flex items-center space-x-1.5 border border-slate-700"
                 title="Open destination URL directly"
               >

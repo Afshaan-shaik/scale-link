@@ -213,6 +213,12 @@ func (s *LinkService) IncrementClick(ctx context.Context, code string) error {
 	return s.linkRepo.IncrementClickCount(ctx, code, 1)
 }
 
+// SyncLinks merges incoming links into cache/repository for resilient multi-instance routing.
+func (s *LinkService) SyncLinks(ctx context.Context, links []*model.Link) error {
+	s.linkRepo.SyncMemLinks(links)
+	return nil
+}
+
 // GetByCode returns a link by code (including expiry info, for stats access).
 func (s *LinkService) GetByCode(ctx context.Context, code string) (*model.Link, error) {
 	return s.linkRepo.GetByCode(ctx, code)

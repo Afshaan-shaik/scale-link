@@ -137,6 +137,9 @@ func main() {
 			With(middleware.OptionalAuth(authSvc)).
 			Post("/", linkH.CreateLink)
 
+		// Sync links endpoint for multi-instance client caching
+		r.Post("/sync", linkH.SyncLinks)
+
 		// Public/OptionalAuth stats (anonymous links accessible, owned links require owner auth)
 		r.With(middleware.OptionalAuth(authSvc)).
 			Get("/{code}/stats", linkH.GetStats)

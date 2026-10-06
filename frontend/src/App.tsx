@@ -37,21 +37,49 @@ export const App: React.FC = () => {
     !['api', 'health', 'metrics', 'src'].includes(pathname)
   );
 
-  // If visiting a short URL, intercept and handle the real 302 redirect
+  // If visiting a short URL directly by pathname, intercept and handle the real 302 redirect
   if (isShortCode) {
     return <RedirectHandler code={pathname} />;
+  }
+
+  // Also check query params ?r=XYZ, ?redirect_code=XYZ, or fallback from server ?error=not_found&code=XYZ
+  const params = new URLSearchParams(window.location.search);
+  const redirectParam = params.get('r') || params.get('redirect_code') || (params.get('error') === 'not_found' ? params.get('code') : null);
+  if (redirectParam) {
+    const stored = loadStoredLinks();
+    const found = stored.find((l) => l.code === redirectParam);
+    if (found && (!found.expires_at || new Date() <= new Date(found.expires_at))) {
+      return <RedirectHandler code={redirectParam} fallbackUrl={found.long_url} />;
+    }
   }
 
   return <DashboardApp />;
 };
 
 // ── Redirect Interceptor Component ───────────────────────────────────────────
-const RedirectHandler: React.FC<{ code: string }> = ({ code }) => {
+const RedirectHandler: React.FC<{ code: string; fallbackUrl?: string }> = ({ code, fallbackUrl }) => {
   const [status, setStatus] = useState<'checking' | 'redirecting' | 'expired' | 'not_found'>('checking');
-  const [targetUrl, setTargetUrl] = useState<string>('');
+  const [targetUrl, setTargetUrl] = useState<string>(fallbackUrl || '');
   const [linkInfo, setLinkInfo] = useState<Link | null>(null);
 
   useEffect(() => {
+    // 0. If fallback destination URL is provided directly from local inventory, forward immediately!
+    if (fallbackUrl) {
+      setTargetUrl(fallbackUrl);
+      setStatus('redirecting');
+      recordLinkClick(code);
+      fetch(`/api/links?code=${encodeURIComponent(code)}&click=true`).catch(() => {});
+      fetch('/api/links/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ links: loadStoredLinks() }),
+      }).catch(() => {});
+      const timer = setTimeout(() => {
+        window.location.replace(fallbackUrl);
+      }, 250);
+      return () => clearTimeout(timer);
+    }
+
     // 1. Check local storage first (instant synchronous lookup)
     const result = recordLinkClick(code);
 
@@ -68,11 +96,16 @@ const RedirectHandler: React.FC<{ code: string }> = ({ code }) => {
 
       // Sync click to backend asynchronously
       fetch(`/api/links?code=${encodeURIComponent(code)}&click=true`).catch(() => {});
+      fetch('/api/links/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ links: loadStoredLinks() }),
+      }).catch(() => {});
 
       // Forward browser to the destination URL
       const timer = setTimeout(() => {
         window.location.replace(result.link!.long_url);
-      }, 400);
+      }, 250);
       return () => clearTimeout(timer);
     }
 
@@ -97,7 +130,7 @@ const RedirectHandler: React.FC<{ code: string }> = ({ code }) => {
 
             const timer = setTimeout(() => {
               window.location.replace(l.long_url);
-            }, 400);
+            }, 250);
             return () => clearTimeout(timer);
           }
         } else {
@@ -107,7 +140,7 @@ const RedirectHandler: React.FC<{ code: string }> = ({ code }) => {
       .catch(() => {
         setStatus('not_found');
       });
-  }, [code]);
+  }, [code, fallbackUrl]);
 
   if (status === 'redirecting') {
     return (
@@ -263,6 +296,13 @@ const DashboardApp: React.FC = () => {
         return hasDiff ? currentStored : prev;
       });
       setStatsMap(loadStoredStats());
+
+      // Sync local links to backend serverless container
+      fetch('/api/links/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ links: currentStored }),
+      }).catch(() => {});
     };
 
     // Initial sync
@@ -314,6 +354,13 @@ const DashboardApp: React.FC = () => {
       timestamp: new Date().toISOString(),
     });
 
+    // Also sync all links to backend serverless container
+    fetch('/api/links/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ links: updated }),
+    }).catch(() => {});
+
     // Initialize stats
     const today = new Date().toISOString().slice(0, 10);
     const newStats: LinkStats = {
@@ -347,7 +394,9 @@ const DashboardApp: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     const err = params.get('error');
     const code = params.get('code');
-    if (err === 'not_found' && code) {
+    const stored = loadStoredLinks();
+    const hasLocal = code ? stored.some((l) => l.code === code) : false;
+    if (err === 'not_found' && code && !hasLocal) {
       return `Link /${code} was not found or has expired.`;
     }
     if (err === 'expired' && code) {

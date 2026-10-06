@@ -18,7 +18,7 @@ module.exports = (req, res) => {
   const pathname = req.url || '';
 
   // Revoke endpoint: /api/sessions/revoke
-  if (pathname.includes('/revoke')) {
+  if (pathname.includes('revoke')) {
     let token = body.token || '';
     if (!token && req.headers['authorization']) {
       const auth = req.headers['authorization'];

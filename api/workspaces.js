@@ -17,7 +17,7 @@ module.exports = (req, res) => {
   body = body || {};
 
   // POST /api/workspaces/transfer/create
-  if (pathname.includes('/transfer/create')) {
+  if (pathname.includes('create')) {
     const auth = resolveSession(req);
     if (!auth || !auth.session) {
       return res.status(401).json({ error: 'Session required to transfer workspace' });
@@ -45,7 +45,7 @@ module.exports = (req, res) => {
   }
 
   // POST /api/workspaces/transfer/claim
-  if (pathname.includes('/transfer/claim')) {
+  if (pathname.includes('claim')) {
     const transferToken = (body.transfer_token || '').trim();
     if (!transferToken) {
       return res.status(400).json({ error: 'transfer_token is required' });

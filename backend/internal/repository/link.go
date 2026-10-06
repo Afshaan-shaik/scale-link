@@ -9,9 +9,31 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"sync"
 
 	"github.com/scalelink/scalelink/internal/model"
 )
+
+var (
+	memLinksOnce sync.Once
+	memLinks     = make(map[string]*model.Link)
+	memLinksMu   sync.RWMutex
+)
+
+func ensureMemLinks() {
+	memLinksOnce.Do(func() {
+		now := time.Now()
+		memLinks["gh-repo"] = &model.Link{
+			ID:         uuid.MustParse("9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"),
+			Code:       "gh-repo",
+			LongURL:    "https://github.com/Afshaan-shaik/scale-link",
+			ClickCount: 842,
+			CreatedAt:  now.Add(-5 * 24 * time.Hour),
+			UpdatedAt:  now.Add(-5 * 24 * time.Hour),
+			IsCustom:   true,
+		}
+	})
+}
 
 // ErrNotFound is returned when a requested resource does not exist or is deleted.
 var ErrNotFound = errors.New("not found")
@@ -31,6 +53,19 @@ func NewLinkRepository(pool *pgxpool.Pool) *LinkRepository {
 
 // Create inserts a new link. Returns ErrConflict if the code is already taken.
 func (r *LinkRepository) Create(ctx context.Context, link *model.Link) error {
+	if r.pool == nil {
+		ensureMemLinks()
+		memLinksMu.Lock()
+		defer memLinksMu.Unlock()
+		if _, exists := memLinks[link.Code]; exists {
+			return ErrConflict
+		}
+		link.CreatedAt = time.Now()
+		link.UpdatedAt = time.Now()
+		memLinks[link.Code] = link
+		return nil
+	}
+
 	query := `
 		INSERT INTO links (id, code, long_url, user_id, expires_at, is_custom, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
@@ -52,6 +87,17 @@ func (r *LinkRepository) Create(ctx context.Context, link *model.Link) error {
 // GetByCode fetches a live (non-deleted) link by its short code.
 // Returns ErrNotFound if no such link exists or it has been soft-deleted.
 func (r *LinkRepository) GetByCode(ctx context.Context, code string) (*model.Link, error) {
+	if r.pool == nil {
+		ensureMemLinks()
+		memLinksMu.RLock()
+		defer memLinksMu.RUnlock()
+		if l, exists := memLinks[code]; exists && l.DeletedAt == nil {
+			copy := *l
+			return &copy, nil
+		}
+		return nil, ErrNotFound
+	}
+
 	query := `
 		SELECT id, code, long_url, user_id, expires_at, created_at, updated_at, deleted_at, click_count, is_custom
 		FROM   links

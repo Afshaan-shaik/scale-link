@@ -44,15 +44,17 @@ func main() {
 	// ── Migrations ────────────────────────────────────────────────────────────
 	log.Info().Msg("running database migrations")
 	if err := db.RunMigrations(cfg); err != nil {
-		log.Fatal().Err(err).Msg("run migrations")
+		log.Warn().Err(err).Msg("run migrations skipped (database not ready or standalone mode)")
 	}
 
 	// ── Postgres pool ─────────────────────────────────────────────────────────
 	pool, err := db.Connect(context.Background(), cfg)
 	if err != nil {
-		log.Fatal().Err(err).Msg("connect to postgres")
+		log.Warn().Err(err).Msg("connect to postgres failed — running in in-memory standalone mode")
+		pool = nil
+	} else {
+		defer pool.Close()
 	}
-	defer pool.Close()
 
 	// ── Redis ─────────────────────────────────────────────────────────────────
 	var rdb *redis.Client

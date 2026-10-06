@@ -21,6 +21,9 @@ func NewBlocklistRepository(pool *pgxpool.Pool) *BlocklistRepository {
 
 // LoadAll returns all blocked domains as a set for fast in-memory lookup.
 func (r *BlocklistRepository) LoadAll(ctx context.Context) (map[string]struct{}, error) {
+	if r.pool == nil {
+		return make(map[string]struct{}), nil
+	}
 	rows, err := r.pool.Query(ctx, `SELECT domain FROM blocked_domains`)
 	if err != nil {
 		return nil, fmt.Errorf("load blocked domains: %w", err)
@@ -40,6 +43,9 @@ func (r *BlocklistRepository) LoadAll(ctx context.Context) (map[string]struct{},
 
 // List returns all blocked domains with metadata.
 func (r *BlocklistRepository) List(ctx context.Context) ([]*model.BlockedDomain, error) {
+	if r.pool == nil {
+		return []*model.BlockedDomain{}, nil
+	}
 	rows, err := r.pool.Query(ctx, `SELECT id, domain, reason, created_at FROM blocked_domains ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list blocked domains: %w", err)

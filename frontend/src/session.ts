@@ -17,6 +17,14 @@ const CURRENT_TAB_INSTANCE_ID = (typeof crypto !== 'undefined' && crypto.randomU
   ? crypto.randomUUID() 
   : 'tab_' + Math.random().toString(36).substring(2) + Date.now();
 
+// Clean up any legacy shared localStorage to guarantee strict tab isolation
+if (typeof localStorage !== 'undefined') {
+  try {
+    localStorage.removeItem('scalelink_saved_links');
+    localStorage.removeItem('scalelink_saved_stats');
+  } catch {}
+}
+
 export interface SessionState {
   token: string;
   workspaceId: string;
@@ -95,6 +103,9 @@ async function verifyTabIsolation(): Promise<boolean> {
             // Original tab IS alive in another window! Wipe cloned credentials so this tab gets a fresh workspace
             sessionStorage.removeItem(SESSION_TOKEN_KEY);
             sessionStorage.removeItem(WORKSPACE_ID_KEY);
+            sessionStorage.removeItem('scalelink_tab_links_cache');
+            sessionStorage.removeItem('scalelink_saved_links');
+            sessionStorage.removeItem('scalelink_tab_stats_cache');
             sessionStorage.setItem(TAB_OWNER_ID_KEY, CURRENT_TAB_INSTANCE_ID);
             resolve(false);
           }
@@ -250,6 +261,9 @@ export async function startNewWorkspace(): Promise<SessionState> {
 
   sessionStorage.removeItem(SESSION_TOKEN_KEY);
   sessionStorage.removeItem(WORKSPACE_ID_KEY);
+  sessionStorage.removeItem('scalelink_tab_links_cache');
+  sessionStorage.removeItem('scalelink_saved_links');
+  sessionStorage.removeItem('scalelink_tab_stats_cache');
   currentSession = { token: '', workspaceId: '', status: 'loading' };
 
   return bootstrapSession();

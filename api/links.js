@@ -50,19 +50,14 @@ module.exports = (req, res) => {
       return res.status(200).json({ link });
     }
 
-    // List Saved URLs: accessible to all users
-    const { mine } = req.query || {};
-    if (mine === 'true') {
-      const auth = resolveSession(req);
-      if (auth && auth.session) {
-        const userLinks = store.links.filter(l => l.workspace_id === auth.session.workspace_id);
-        if (userLinks.length > 0) {
-          return res.status(200).json({ links: userLinks, total: userLinks.length, limit: 50, offset: 0 });
-        }
-      }
+    // List Saved URLs: strictly filtered by anonymous workspace ownership (Strict Isolation)
+    const auth = resolveSession(req);
+    if (!auth || !auth.session) {
+      return res.status(200).json({ links: [], total: 0, limit: 50, offset: 0 });
     }
 
-    return res.status(200).json({ links: store.links, total: store.links.length, limit: 50, offset: 0 });
+    const userLinks = store.links.filter(l => l.workspace_id === auth.session.workspace_id);
+    return res.status(200).json({ links: userLinks, total: userLinks.length, limit: 50, offset: 0 });
   }
 
   // POST /api/links

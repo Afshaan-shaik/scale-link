@@ -105,38 +105,26 @@ export const INITIAL_STATS: Record<string, LinkStats> = {
   },
 };
 
-// ── Persistent Saved URLs Store (shared across tabs and sessions) ──
-const LOCAL_LINKS_KEY = 'scalelink_saved_links';
+// ── Tab-Scoped Isolated Workspace Store (sessionStorage only, strictly isolated per tab/device) ──
 const TAB_LINKS_KEY = 'scalelink_tab_links_cache';
-const LOCAL_STATS_KEY = 'scalelink_saved_stats';
 const TAB_STATS_KEY = 'scalelink_tab_stats_cache';
 
 export function loadStoredLinks(): Link[] {
   try {
-    const rawLocal = typeof localStorage !== 'undefined' ? localStorage.getItem(LOCAL_LINKS_KEY) : null;
-    if (rawLocal) {
-      const parsed = JSON.parse(rawLocal);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-    }
     const rawTab = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(TAB_LINKS_KEY) : null;
     if (rawTab) {
       const parsed = JSON.parse(rawTab);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     }
   } catch {}
-  return INITIAL_LINKS;
+  return [];
 }
 
 export function saveStoredLinks(links: Link[]) {
   try {
     const json = JSON.stringify(links);
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(LOCAL_LINKS_KEY, json);
-    }
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.setItem(TAB_LINKS_KEY, json);
     }
@@ -145,10 +133,6 @@ export function saveStoredLinks(links: Link[]) {
 
 export function loadStoredStats(): Record<string, LinkStats> {
   try {
-    const rawLocal = typeof localStorage !== 'undefined' ? localStorage.getItem(LOCAL_STATS_KEY) : null;
-    if (rawLocal) {
-      return JSON.parse(rawLocal);
-    }
     const rawTab = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(TAB_STATS_KEY) : null;
     if (rawTab) {
       return JSON.parse(rawTab);
@@ -160,9 +144,6 @@ export function loadStoredStats(): Record<string, LinkStats> {
 export function saveStoredStats(stats: Record<string, LinkStats>) {
   try {
     const json = JSON.stringify(stats);
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(LOCAL_STATS_KEY, json);
-    }
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.setItem(TAB_STATS_KEY, json);
     }
@@ -170,21 +151,21 @@ export function saveStoredStats(stats: Record<string, LinkStats>) {
 }
 
 /**
- * Fetch Saved URLs from the server, merging with locally saved URLs.
+ * Fetch Saved URLs for this isolated workspace from the server.
  */
 export async function fetchWorkspaceLinks(): Promise<Link[]> {
   try {
     const res = await sessionFetch('/api/links');
     if (res.ok) {
       const data = await res.json();
-      if (data && Array.isArray(data.links) && data.links.length > 0) {
+      if (data && Array.isArray(data.links)) {
         const local = loadStoredLinks();
         const map = new Map<string, Link>();
-        // Add server links first
+        // Add server links for this workspace
         for (const l of data.links) {
           map.set(l.code, l);
         }
-        // Retain any locally saved links that aren't on server yet
+        // Preserve any links created in this tab that haven't reached server yet
         for (const l of local) {
           if (!map.has(l.code)) {
             map.set(l.code, l);

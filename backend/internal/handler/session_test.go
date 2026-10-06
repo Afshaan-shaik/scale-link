@@ -140,10 +140,10 @@ func TestCrossTabSessionIsolationAndSecurity(t *testing.T) {
 		} `json:"links"`
 	}
 	require.NoError(t, json.Unmarshal(listRecA.Body.Bytes(), &listA))
-	require.NotEmpty(t, listA.Links)
-	assert.True(t, len(listA.Links) > 0)
+	require.Len(t, listA.Links, 1)
+	assert.Equal(t, linkA.Code, listA.Links[0].Code)
 
-	// 5. Tab B lists links -> Saved URLs are accessible to all users
+	// 5. Tab B lists links -> Tab B must NOT see Tab A's link! (Strict Workspace Isolation)
 	listReqB := httptest.NewRequest("GET", "/api/links", nil)
 	listReqB.Header.Set("Authorization", "Bearer "+tokenB)
 	listRecB := httptest.NewRecorder()
@@ -157,7 +157,7 @@ func TestCrossTabSessionIsolationAndSecurity(t *testing.T) {
 		} `json:"links"`
 	}
 	require.NoError(t, json.Unmarshal(listRecB.Body.Bytes(), &listB))
-	assert.NotEmpty(t, listB.Links, "Saved URLs must be accessible to all users")
+	assert.Empty(t, listB.Links, "Tab B must NOT see Tab A's saved links")
 
 	// 6. Tab B attempts to delete Tab A's link -> Rejected (404/403)
 	delReqB := httptest.NewRequest("DELETE", "/api/links/"+linkA.ID, nil)
@@ -221,5 +221,6 @@ func TestCrossTabSessionIsolationAndSecurity(t *testing.T) {
 		} `json:"links"`
 	}
 	require.NoError(t, json.Unmarshal(listRecC.Body.Bytes(), &listC))
-	require.NotEmpty(t, listC.Links)
+	require.Len(t, listC.Links, 1)
+	assert.Equal(t, linkA.Code, listC.Links[0].Code)
 }

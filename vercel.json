@@ -43,10 +43,15 @@
       }
     },
     {
-      "source": "/(.*)",
+      "source": "/",
       "destination": {
-        "service": "frontend",
-        "path": "/index.html"
+        "service": "frontend"
+      }
+    },
+    {
+      "source": "/:code",
+      "destination": {
+        "service": "backend"
       }
     }
   ]

@@ -293,6 +293,19 @@ const DashboardApp: React.FC = () => {
     setStatsMap(loadStoredStats());
   };
 
+  const [urlNotice, setUrlNotice] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get('error');
+    const code = params.get('code');
+    if (err === 'not_found' && code) {
+      return `Link /${code} was not found or has expired.`;
+    }
+    if (err === 'expired' && code) {
+      return `Link /${code} has expired.`;
+    }
+    return null;
+  });
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       {/* Navigation Header */}
@@ -301,6 +314,26 @@ const DashboardApp: React.FC = () => {
         setActiveTab={setActiveTab}
         linksCount={links.length}
       />
+
+      {urlNotice && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 w-full">
+          <div className="bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs px-4 py-3 rounded-xl flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>{urlNotice}</span>
+            </div>
+            <button
+              onClick={() => {
+                setUrlNotice(null);
+                window.history.replaceState({}, '', '/');
+              }}
+              className="text-amber-400 hover:text-white text-xs font-semibold px-2 py-0.5 rounded"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">

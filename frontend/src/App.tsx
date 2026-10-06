@@ -269,22 +269,34 @@ const DashboardApp: React.FC = () => {
     };
   }, []);
 
-  // Periodic sync for this tab's workspace (strictly isolated)
+  // Periodic sync for saved links across users & server
   useEffect(() => {
     const syncWorkspace = async () => {
       try {
         const res = await sessionFetch('/api/links');
         if (res.ok) {
           const data = await res.json();
-          if (data && Array.isArray(data.links)) {
-            setLinks(data.links);
-            saveStoredLinks(data.links);
+          if (data && Array.isArray(data.links) && data.links.length > 0) {
+            setLinks((prev) => {
+              const map = new Map<string, Link>();
+              for (const l of data.links) {
+                map.set(l.code, l);
+              }
+              for (const l of prev) {
+                if (!map.has(l.code)) {
+                  map.set(l.code, l);
+                }
+              }
+              const merged = Array.from(map.values());
+              saveStoredLinks(merged);
+              return merged;
+            });
           }
         }
       } catch {}
     };
 
-    const interval = setInterval(syncWorkspace, 3000);
+    const interval = setInterval(syncWorkspace, 4000);
     const handleFocus = () => syncWorkspace();
     window.addEventListener('focus', handleFocus);
 

@@ -93,7 +93,7 @@ export const MyLinksTable: React.FC<MyLinksTableProps> = ({
             )}
           </div>
           <p className="text-[var(--mut)] text-[14px] mt-1">
-            Isolated anonymous workspace • {links.length} saved URLs
+            Production URL catalog • {links.length} saved URLs
           </p>
         </div>
 

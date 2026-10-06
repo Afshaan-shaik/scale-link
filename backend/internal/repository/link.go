@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -435,7 +436,18 @@ func (r *LinkRepository) ListAll(ctx context.Context, limit, offset int, search 
 				}
 			}
 		}
-		return res, len(res), nil
+		sort.Slice(res, func(i, j int) bool {
+			return res[i].CreatedAt.After(res[j].CreatedAt)
+		})
+		total := len(res)
+		if offset >= total {
+			return []*model.Link{}, total, nil
+		}
+		end := offset + limit
+		if end > total || limit <= 0 {
+			end = total
+		}
+		return res[offset:end], total, nil
 	}
 
 	query := `

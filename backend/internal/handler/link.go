@@ -303,60 +303,41 @@ func (h *LinkHandler) ListLinks(w http.ResponseWriter, r *http.Request) {
 		limit = 100
 	}
 
-	// 1. If anonymous workspace context exists, return ONLY this workspace's links
-	if wsID, ok := middleware.WorkspaceIDFromContext(r.Context()); ok {
-		links, total, err := h.linkSvc.ListByWorkspace(r.Context(), wsID, limit, offset, search)
-		if err != nil {
-			respondError(w, http.StatusInternalServerError, "failed to list workspace links")
-			return
+	// 1. If explicitly requested to filter by current workspace only
+	if q.Get("mine") == "true" {
+		if wsID, ok := middleware.WorkspaceIDFromContext(r.Context()); ok {
+			links, total, err := h.linkSvc.ListByWorkspace(r.Context(), wsID, limit, offset, search)
+			if err == nil && len(links) > 0 {
+				summaries := make([]*linkSummary, 0, len(links))
+				for _, l := range links {
+					summaries = append(summaries, toLinkSummary(l, baseURL))
+				}
+				respond(w, http.StatusOK, listLinksResponse{
+					Links:  summaries,
+					Total:  total,
+					Limit:  limit,
+					Offset: offset,
+				})
+				return
+			}
 		}
+	}
 
-		summaries := make([]*linkSummary, 0, len(links))
-		for _, l := range links {
-			summaries = append(summaries, toLinkSummary(l, baseURL))
-		}
-
-		respond(w, http.StatusOK, listLinksResponse{
-			Links:  summaries,
-			Total:  total,
-			Limit:  limit,
-			Offset: offset,
-		})
+	// 2. Return all saved URLs so they are accessible to all users
+	links, total, err := h.linkSvc.ListPublic(r.Context(), limit, offset, search)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to list links")
 		return
 	}
 
-	// 2. If JWT authenticated user, return user's links
-	if claims, ok := middleware.ClaimsFromContext(r.Context()); ok {
-		userID, err := uuid.Parse(claims.UserID)
-		if err != nil {
-			respondError(w, http.StatusBadRequest, "invalid user ID in token")
-			return
-		}
-
-		links, total, err := h.linkSvc.ListByUser(r.Context(), userID, limit, offset, search)
-		if err != nil {
-			respondError(w, http.StatusInternalServerError, "failed to list links")
-			return
-		}
-
-		summaries := make([]*linkSummary, 0, len(links))
-		for _, l := range links {
-			summaries = append(summaries, toLinkSummary(l, baseURL))
-		}
-
-		respond(w, http.StatusOK, listLinksResponse{
-			Links:  summaries,
-			Total:  total,
-			Limit:  limit,
-			Offset: offset,
-		})
-		return
+	summaries := make([]*linkSummary, 0, len(links))
+	for _, l := range links {
+		summaries = append(summaries, toLinkSummary(l, baseURL))
 	}
 
-	// 3. Unauthenticated query: return empty list (never expose other users' saved links)
 	respond(w, http.StatusOK, listLinksResponse{
-		Links:  []*linkSummary{},
-		Total:  0,
+		Links:  summaries,
+		Total:  total,
 		Limit:  limit,
 		Offset: offset,
 	})

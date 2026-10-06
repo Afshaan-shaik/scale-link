@@ -214,6 +214,106 @@ scalelink_ratelimit_rejections_total{action="create"} 4
 		}
 	})
 
+	// Anonymous Sessions
+	mux8080.HandleFunc("/api/sessions/bootstrap", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Session-Token")
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		var req struct {
+			Token string `json:"token"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		token := req.Token
+		if token == "" {
+			if auth := r.Header.Get("Authorization"); strings.HasPrefix(strings.ToLower(auth), "bearer ") {
+				token = strings.TrimSpace(auth[7:])
+			}
+		}
+
+		wsID := "ws-standalone-1"
+		newToken := token
+		if newToken == "" {
+			chars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+			b := make([]byte, 32)
+			for i := range b {
+				b[i] = chars[rand.Intn(len(chars))]
+			}
+			newToken = string(b)
+			wsID = fmt.Sprintf("ws-%d", time.Now().UnixNano())
+		}
+
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"session": map[string]interface{}{
+				"id":           "sess-1",
+				"workspace_id": wsID,
+				"status":       "active",
+				"token":        newToken,
+				"expires_at":   time.Now().Add(90 * 24 * time.Hour),
+			},
+			"workspace": map[string]interface{}{
+				"id":         wsID,
+				"status":     "active",
+				"created_at": time.Now(),
+			},
+		})
+	})
+
+	mux8080.HandleFunc("/api/sessions/revoke", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]bool{"revoked": true})
+	})
+
+	mux8080.HandleFunc("/api/workspaces/transfer/create", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		chars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+		b := make([]byte, 32)
+		for i := range b {
+			b[i] = chars[rand.Intn(len(chars))]
+		}
+		tToken := string(b)
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"transfer_token": tToken,
+			"workspace_id":   "ws-standalone-1",
+			"expires_at":     time.Now().Add(10 * time.Minute),
+		})
+	})
+
+	mux8080.HandleFunc("/api/workspaces/transfer/claim", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		chars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+		b := make([]byte, 32)
+		for i := range b {
+			b[i] = chars[rand.Intn(len(chars))]
+		}
+		newToken := string(b)
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"session": map[string]interface{}{
+				"id":           "sess-transferred",
+				"workspace_id": "ws-standalone-1",
+				"status":       "active",
+				"token":        newToken,
+				"expires_at":   time.Now().Add(90 * 24 * time.Hour),
+			},
+			"workspace": map[string]interface{}{
+				"id":         "ws-standalone-1",
+				"status":     "active",
+				"created_at": time.Now(),
+			},
+		})
+	})
+
 	// Auth stub
 	mux8080.HandleFunc("/api/auth/login", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

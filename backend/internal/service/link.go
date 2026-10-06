@@ -42,6 +42,7 @@ type CreateLinkRequest struct {
 	CustomAlias string     // optional; empty = generate random code
 	ExpiresAt   *time.Time // optional
 	UserID      *uuid.UUID // nil for anonymous
+	WorkspaceID *uuid.UUID // nil if unassigned, set for anonymous workspace
 }
 
 // CreateLinkResponse is returned after successful link creation.
@@ -126,12 +127,13 @@ func (s *LinkService) Create(ctx context.Context, req CreateLinkRequest) (*Creat
 
 	// 4. Build and persist the link
 	link := &model.Link{
-		ID:        uuid.New(),
-		Code:      code,
-		LongURL:   req.LongURL,
-		UserID:    req.UserID,
-		ExpiresAt: req.ExpiresAt,
-		IsCustom:  isCustom,
+		ID:          uuid.New(),
+		Code:        code,
+		LongURL:     req.LongURL,
+		UserID:      req.UserID,
+		WorkspaceID: req.WorkspaceID,
+		ExpiresAt:   req.ExpiresAt,
+		IsCustom:    isCustom,
 	}
 
 	if err := s.linkRepo.Create(ctx, link); err != nil {
@@ -186,6 +188,18 @@ func (s *LinkService) SoftDelete(ctx context.Context, id uuid.UUID, userID uuid.
 	return nil
 }
 
+// SoftDeleteByWorkspace removes a link belonging to a workspace and invalidates cache.
+func (s *LinkService) SoftDeleteByWorkspace(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID) error {
+	code, err := s.linkRepo.SoftDeleteByWorkspace(ctx, id, workspaceID)
+	if err != nil {
+		return err
+	}
+	if s.cache != nil && code != "" {
+		_ = s.cache.Invalidate(ctx, code)
+	}
+	return nil
+}
+
 // UpdateExpiry changes the expiry of a link (owner-only) and invalidates cache.
 func (s *LinkService) UpdateExpiry(ctx context.Context, id uuid.UUID, userID uuid.UUID, expiresAt *time.Time) error {
 	code, err := s.linkRepo.UpdateExpiry(ctx, id, userID, expiresAt)
@@ -198,9 +212,36 @@ func (s *LinkService) UpdateExpiry(ctx context.Context, id uuid.UUID, userID uui
 	return nil
 }
 
+// UpdateExpiryByWorkspace changes the expiry of a link belonging to a workspace and invalidates cache.
+func (s *LinkService) UpdateExpiryByWorkspace(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID, expiresAt *time.Time) error {
+	code, err := s.linkRepo.UpdateExpiryByWorkspace(ctx, id, workspaceID, expiresAt)
+	if err != nil {
+		return err
+	}
+	if s.cache != nil && code != "" {
+		_ = s.cache.Invalidate(ctx, code)
+	}
+	return nil
+}
+
 // ListByUser returns paginated links for a user.
 func (s *LinkService) ListByUser(ctx context.Context, userID uuid.UUID, limit, offset int, search string) ([]*model.Link, int, error) {
 	return s.linkRepo.ListByUser(ctx, userID, limit, offset, search)
+}
+
+// ListByWorkspace returns paginated links for an anonymous workspace.
+func (s *LinkService) ListByWorkspace(ctx context.Context, workspaceID uuid.UUID, limit, offset int, search string) ([]*model.Link, int, error) {
+	return s.linkRepo.ListByWorkspace(ctx, workspaceID, limit, offset, search)
+}
+
+// GetByCodeAndWorkspace returns a link by code if it belongs to the workspace.
+func (s *LinkService) GetByCodeAndWorkspace(ctx context.Context, code string, workspaceID uuid.UUID) (*model.Link, error) {
+	return s.linkRepo.GetByCodeAndWorkspace(ctx, code, workspaceID)
+}
+
+// GetByIDAndWorkspace returns a link by ID if it belongs to the workspace.
+func (s *LinkService) GetByIDAndWorkspace(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID) (*model.Link, error) {
+	return s.linkRepo.GetByIDAndWorkspace(ctx, id, workspaceID)
 }
 
 // ListPublic returns all active links for public monitoring.

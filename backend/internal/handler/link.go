@@ -114,11 +114,18 @@ func (h *LinkHandler) CreateLink(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Extract optional anonymous workspace ID from session context
+	var workspaceID *uuid.UUID
+	if wsID, ok := middleware.WorkspaceIDFromContext(r.Context()); ok {
+		workspaceID = &wsID
+	}
+
 	createReq := service.CreateLinkRequest{
 		LongURL:     req.LongURL,
 		CustomAlias: req.CustomAlias,
 		ExpiresAt:   expiresAt,
 		UserID:      userID,
+		WorkspaceID: workspaceID,
 	}
 
 	result, err := h.linkSvc.Create(r.Context(), createReq)
@@ -296,47 +303,60 @@ func (h *LinkHandler) ListLinks(w http.ResponseWriter, r *http.Request) {
 		limit = 100
 	}
 
-	claims, ok := middleware.ClaimsFromContext(r.Context())
-	if !ok {
-		// Public listing of active links with real-time click counts
-		links, total, err := h.linkSvc.ListPublic(r.Context(), limit, offset, search)
-		if err == nil {
-			summaries := make([]*linkSummary, 0, len(links))
-			for _, l := range links {
-				summaries = append(summaries, toLinkSummary(l, baseURL))
-			}
-			respond(w, http.StatusOK, listLinksResponse{
-				Links:  summaries,
-				Total:  total,
-				Limit:  limit,
-				Offset: offset,
-			})
+	// 1. If anonymous workspace context exists, return ONLY this workspace's links
+	if wsID, ok := middleware.WorkspaceIDFromContext(r.Context()); ok {
+		links, total, err := h.linkSvc.ListByWorkspace(r.Context(), wsID, limit, offset, search)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "failed to list workspace links")
 			return
 		}
-		respondError(w, http.StatusUnauthorized, "authentication required")
+
+		summaries := make([]*linkSummary, 0, len(links))
+		for _, l := range links {
+			summaries = append(summaries, toLinkSummary(l, baseURL))
+		}
+
+		respond(w, http.StatusOK, listLinksResponse{
+			Links:  summaries,
+			Total:  total,
+			Limit:  limit,
+			Offset: offset,
+		})
 		return
 	}
 
-	userID, err := uuid.Parse(claims.UserID)
-	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid user ID in token")
+	// 2. If JWT authenticated user, return user's links
+	if claims, ok := middleware.ClaimsFromContext(r.Context()); ok {
+		userID, err := uuid.Parse(claims.UserID)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "invalid user ID in token")
+			return
+		}
+
+		links, total, err := h.linkSvc.ListByUser(r.Context(), userID, limit, offset, search)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "failed to list links")
+			return
+		}
+
+		summaries := make([]*linkSummary, 0, len(links))
+		for _, l := range links {
+			summaries = append(summaries, toLinkSummary(l, baseURL))
+		}
+
+		respond(w, http.StatusOK, listLinksResponse{
+			Links:  summaries,
+			Total:  total,
+			Limit:  limit,
+			Offset: offset,
+		})
 		return
 	}
 
-	links, total, err := h.linkSvc.ListByUser(r.Context(), userID, limit, offset, search)
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, "failed to list links")
-		return
-	}
-
-	summaries := make([]*linkSummary, 0, len(links))
-	for _, l := range links {
-		summaries = append(summaries, toLinkSummary(l, baseURL))
-	}
-
+	// 3. Unauthenticated query: return empty list (never expose other users' saved links)
 	respond(w, http.StatusOK, listLinksResponse{
-		Links:  summaries,
-		Total:  total,
+		Links:  []*linkSummary{},
+		Total:  0,
 		Limit:  limit,
 		Offset: offset,
 	})
@@ -367,17 +387,6 @@ func (h *LinkHandler) ResolvePublic(w http.ResponseWriter, r *http.Request) {
 
 // GetLink handles GET /api/links/{code}
 func (h *LinkHandler) GetLink(w http.ResponseWriter, r *http.Request) {
-	claims, ok := middleware.ClaimsFromContext(r.Context())
-	if !ok {
-		respondError(w, http.StatusUnauthorized, "authentication required")
-		return
-	}
-	userID, err := uuid.Parse(claims.UserID)
-	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid user ID")
-		return
-	}
-
 	code := chi.URLParam(r, "code")
 	link, err := h.linkSvc.GetByCode(r.Context(), code)
 	if err != nil {
@@ -389,9 +398,20 @@ func (h *LinkHandler) GetLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Ensure the requesting user owns the link
-	if link.UserID == nil || *link.UserID != userID {
-		respondError(w, http.StatusForbidden, "access denied")
+	// Verify ownership:
+	if wsID, ok := middleware.WorkspaceIDFromContext(r.Context()); ok {
+		if link.WorkspaceID == nil || *link.WorkspaceID != wsID {
+			respondError(w, http.StatusForbidden, "access denied")
+			return
+		}
+	} else if claims, ok := middleware.ClaimsFromContext(r.Context()); ok {
+		userID, err := uuid.Parse(claims.UserID)
+		if err != nil || link.UserID == nil || *link.UserID != userID {
+			respondError(w, http.StatusForbidden, "access denied")
+			return
+		}
+	} else {
+		respondError(w, http.StatusUnauthorized, "authentication required")
 		return
 	}
 
@@ -407,13 +427,6 @@ type updateLinkRequest struct {
 
 // UpdateLink handles PATCH /api/links/{id} (only expiry is editable)
 func (h *LinkHandler) UpdateLink(w http.ResponseWriter, r *http.Request) {
-	claims, ok := middleware.ClaimsFromContext(r.Context())
-	if !ok {
-		respondError(w, http.StatusUnauthorized, "authentication required")
-		return
-	}
-	userID, _ := uuid.Parse(claims.UserID)
-
 	idStr := chi.URLParam(r, "id")
 	linkID, err := uuid.Parse(idStr)
 	if err != nil {
@@ -437,29 +450,42 @@ func (h *LinkHandler) UpdateLink(w http.ResponseWriter, r *http.Request) {
 		expiresAt = &t
 	}
 
-	if err := h.linkSvc.UpdateExpiry(r.Context(), linkID, userID, expiresAt); err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "link not found")
+	// 1. Check workspace context
+	if wsID, ok := middleware.WorkspaceIDFromContext(r.Context()); ok {
+		if err := h.linkSvc.UpdateExpiryByWorkspace(r.Context(), linkID, wsID, expiresAt); err != nil {
+			if errors.Is(err, repository.ErrNotFound) {
+				respondError(w, http.StatusNotFound, "link not found or access denied")
+				return
+			}
+			respondError(w, http.StatusInternalServerError, "failed to update link")
 			return
 		}
-		respondError(w, http.StatusInternalServerError, "failed to update link")
+		respond(w, http.StatusOK, map[string]string{"status": "updated"})
 		return
 	}
 
-	respond(w, http.StatusOK, map[string]string{"status": "updated"})
+	// 2. Check JWT user context
+	if claims, ok := middleware.ClaimsFromContext(r.Context()); ok {
+		userID, _ := uuid.Parse(claims.UserID)
+		if err := h.linkSvc.UpdateExpiry(r.Context(), linkID, userID, expiresAt); err != nil {
+			if errors.Is(err, repository.ErrNotFound) {
+				respondError(w, http.StatusNotFound, "link not found or access denied")
+				return
+			}
+			respondError(w, http.StatusInternalServerError, "failed to update link")
+			return
+		}
+		respond(w, http.StatusOK, map[string]string{"status": "updated"})
+		return
+	}
+
+	respondError(w, http.StatusUnauthorized, "authentication required")
 }
 
 // ── DELETE /api/links/{id} ────────────────────────────────────────────────
 
 // DeleteLink handles DELETE /api/links/{id}
 func (h *LinkHandler) DeleteLink(w http.ResponseWriter, r *http.Request) {
-	claims, ok := middleware.ClaimsFromContext(r.Context())
-	if !ok {
-		respondError(w, http.StatusUnauthorized, "authentication required")
-		return
-	}
-	userID, _ := uuid.Parse(claims.UserID)
-
 	idStr := chi.URLParam(r, "id")
 	linkID, err := uuid.Parse(idStr)
 	if err != nil {
@@ -467,16 +493,36 @@ func (h *LinkHandler) DeleteLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.linkSvc.SoftDelete(r.Context(), linkID, userID); err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "link not found")
+	// 1. Check workspace context
+	if wsID, ok := middleware.WorkspaceIDFromContext(r.Context()); ok {
+		if err := h.linkSvc.SoftDeleteByWorkspace(r.Context(), linkID, wsID); err != nil {
+			if errors.Is(err, repository.ErrNotFound) {
+				respondError(w, http.StatusNotFound, "link not found or access denied")
+				return
+			}
+			respondError(w, http.StatusInternalServerError, "failed to delete link")
 			return
 		}
-		respondError(w, http.StatusInternalServerError, "failed to delete link")
+		respond(w, http.StatusOK, map[string]string{"status": "deleted"})
 		return
 	}
 
-	respond(w, http.StatusOK, map[string]string{"status": "deleted"})
+	// 2. Check JWT user context
+	if claims, ok := middleware.ClaimsFromContext(r.Context()); ok {
+		userID, _ := uuid.Parse(claims.UserID)
+		if err := h.linkSvc.SoftDelete(r.Context(), linkID, userID); err != nil {
+			if errors.Is(err, repository.ErrNotFound) {
+				respondError(w, http.StatusNotFound, "link not found or access denied")
+				return
+			}
+			respondError(w, http.StatusInternalServerError, "failed to delete link")
+			return
+		}
+		respond(w, http.StatusOK, map[string]string{"status": "deleted"})
+		return
+	}
+
+	respondError(w, http.StatusUnauthorized, "authentication required")
 }
 
 // ── GET /api/links/{code}/stats ────────────────────────────────────────────
@@ -496,17 +542,25 @@ func (h *LinkHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If link has an owner, require authentication and verify ownership
-	if link.UserID != nil {
-		claims, ok := middleware.ClaimsFromContext(r.Context())
-		if !ok {
-			respondError(w, http.StatusUnauthorized, "authentication required")
-			return
-		}
-		userID, err := uuid.Parse(claims.UserID)
-		if err != nil || *link.UserID != userID {
-			respondError(w, http.StatusForbidden, "access denied")
-			return
+	// Verify ownership unless public demo link gh-repo
+	if code != "gh-repo" {
+		if link.WorkspaceID != nil {
+			wsID, ok := middleware.WorkspaceIDFromContext(r.Context())
+			if !ok || *link.WorkspaceID != wsID {
+				respondError(w, http.StatusForbidden, "access denied")
+				return
+			}
+		} else if link.UserID != nil {
+			claims, ok := middleware.ClaimsFromContext(r.Context())
+			if !ok {
+				respondError(w, http.StatusUnauthorized, "authentication required")
+				return
+			}
+			userID, err := uuid.Parse(claims.UserID)
+			if err != nil || *link.UserID != userID {
+				respondError(w, http.StatusForbidden, "access denied")
+				return
+			}
 		}
 	}
 

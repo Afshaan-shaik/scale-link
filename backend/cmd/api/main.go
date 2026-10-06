@@ -80,25 +80,28 @@ func main() {
 	streamProducer := stream.NewProducer(rdb, cfg.StreamClickEvents)
 
 	// ── Repositories ──────────────────────────────────────────────────────────
-	linkRepo  := repository.NewLinkRepository(pool)
-	userRepo  := repository.NewUserRepository(pool)
-	keyRepo   := repository.NewAPIKeyRepository(pool)
-	blockRepo := repository.NewBlocklistRepository(pool)
-	statsRepo := repository.NewStatsRepository(pool)
+	linkRepo    := repository.NewLinkRepository(pool)
+	userRepo    := repository.NewUserRepository(pool)
+	keyRepo     := repository.NewAPIKeyRepository(pool)
+	blockRepo   := repository.NewBlocklistRepository(pool)
+	statsRepo   := repository.NewStatsRepository(pool)
+	sessionRepo := repository.NewSessionRepository(pool)
 
 	// ── Services ──────────────────────────────────────────────────────────────
 	linkSvc, err := service.NewLinkService(cfg, linkRepo, blockRepo, linkCache)
 	if err != nil {
 		log.Fatal().Err(err).Msg("init link service")
 	}
-	authSvc  := service.NewAuthService(cfg, userRepo, keyRepo)
-	statsSvc := service.NewStatsService(statsRepo)
+	authSvc    := service.NewAuthService(cfg, userRepo, keyRepo)
+	statsSvc   := service.NewStatsService(statsRepo)
+	sessionSvc := service.NewSessionService(cfg, sessionRepo)
 
 	// ── Handlers ──────────────────────────────────────────────────────────────
-	linkH   := handler.NewLinkHandler(linkSvc, statsSvc, linkCache, streamProducer, cfg.RedirectStatusCode, cfg.CacheLinkTTL, cfg.CacheNegativeTTL)
-	authH   := handler.NewAuthHandler(authSvc)
-	keyH    := handler.NewAPIKeyHandler(authSvc)
-	healthH := handler.NewHealthHandler(pool, rdb)
+	linkH    := handler.NewLinkHandler(linkSvc, statsSvc, linkCache, streamProducer, cfg.RedirectStatusCode, cfg.CacheLinkTTL, cfg.CacheNegativeTTL)
+	authH    := handler.NewAuthHandler(authSvc)
+	keyH     := handler.NewAPIKeyHandler(authSvc)
+	healthH  := handler.NewHealthHandler(pool, rdb)
+	sessionH := handler.NewSessionHandler(sessionSvc)
 
 	// ── Router ────────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -108,12 +111,13 @@ func main() {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Metrics)
+	r.Use(middleware.SecurityHeaders)
 	r.Use(middleware.Recoverer)
 	r.Use(chiMiddleware.StripSlashes)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID", "X-Session-Token", "X-Base-URL"},
 		ExposedHeaders:   []string{"X-Cache", "X-Served-By", "X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining", "Retry-After"},
 		AllowCredentials: false,
 		MaxAge:           300,
@@ -123,6 +127,22 @@ func main() {
 	r.Get("/health", healthH.Health)
 	r.Get("/metrics", promhttp.Handler().ServeHTTP)
 
+	// Anonymous Sessions & Workspaces
+	r.Route("/api/sessions", func(r chi.Router) {
+		r.With(middleware.RateLimit(limiter, "session_bootstrap", 60)).
+			Post("/bootstrap", sessionH.Bootstrap)
+		r.Post("/revoke", sessionH.Revoke)
+	})
+
+	r.Route("/api/workspaces", func(r chi.Router) {
+		r.With(middleware.SessionRequired(sessionSvc)).
+			With(middleware.RateLimit(limiter, "workspace_transfer_create", 30)).
+			Post("/transfer/create", sessionH.CreateTransfer)
+
+		r.With(middleware.RateLimit(limiter, "workspace_transfer_claim", 30)).
+			Post("/transfer/claim", sessionH.ClaimTransfer)
+	})
+
 	// Auth
 	r.Route("/api/auth", func(r chi.Router) {
 		r.Post("/register", authH.Register)
@@ -131,29 +151,33 @@ func main() {
 		r.With(middleware.AuthRequired(authSvc)).Get("/me", authH.Me)
 	})
 
-	// Links — creation is rate-limited and optionally authenticated
+	// Links — creation is rate-limited and optionally authenticated / session-aware
 	r.Route("/api/links", func(r chi.Router) {
 		r.With(middleware.RateLimit(limiter, "create", cfg.RateLimitCreatePerMin)).
 			With(middleware.OptionalAuth(authSvc)).
+			With(middleware.OptionalSession(sessionSvc)).
 			Post("/", linkH.CreateLink)
 
 		// Sync links endpoint for multi-instance client caching
 		r.Post("/sync", linkH.SyncLinks)
 
-		// Public/OptionalAuth stats (anonymous links accessible, owned links require owner auth)
+		// Stats (workspace/owner link requires ownership check)
 		r.With(middleware.OptionalAuth(authSvc)).
+			With(middleware.OptionalSession(sessionSvc)).
 			Get("/{code}/stats", linkH.GetStats)
 
 		// Public resolver
 		r.Get("/resolve/{code}", linkH.ResolvePublic)
 
-		// Public or authenticated link listing
+		// Link listing filtered by workspace or auth user
 		r.With(middleware.OptionalAuth(authSvc)).
+			With(middleware.OptionalSession(sessionSvc)).
 			Get("/", linkH.ListLinks)
 
-		// Authenticated link management
+		// Authenticated/workspace link management
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.AuthRequired(authSvc))
+			r.Use(middleware.OptionalAuth(authSvc))
+			r.Use(middleware.OptionalSession(sessionSvc))
 			r.Get("/{code}",  linkH.GetLink)
 			r.Patch("/{id}",  linkH.UpdateLink)
 			r.Delete("/{id}", linkH.DeleteLink)

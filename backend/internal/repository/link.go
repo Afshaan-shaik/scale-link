@@ -98,6 +98,9 @@ func (r *LinkRepository) SyncMemLinks(links []*model.Link) {
 			if existing.LongURL == "" && l.LongURL != "" {
 				existing.LongURL = l.LongURL
 			}
+			if existing.WorkspaceID == nil && l.WorkspaceID != nil {
+				existing.WorkspaceID = l.WorkspaceID
+			}
 		} else {
 			if l.ID == uuid.Nil {
 				l.ID = uuid.New()
@@ -132,12 +135,12 @@ func (r *LinkRepository) Create(ctx context.Context, link *model.Link) error {
 	}
 
 	query := `
-		INSERT INTO links (id, code, long_url, user_id, expires_at, is_custom, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+		INSERT INTO links (id, code, long_url, user_id, workspace_id, expires_at, is_custom, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
 		RETURNING created_at, updated_at`
 
 	err := r.pool.QueryRow(ctx, query,
-		link.ID, link.Code, link.LongURL, link.UserID, link.ExpiresAt, link.IsCustom,
+		link.ID, link.Code, link.LongURL, link.UserID, link.WorkspaceID, link.ExpiresAt, link.IsCustom,
 	).Scan(&link.CreatedAt, &link.UpdatedAt)
 
 	if err != nil {
@@ -164,14 +167,14 @@ func (r *LinkRepository) GetByCode(ctx context.Context, code string) (*model.Lin
 	}
 
 	query := `
-		SELECT id, code, long_url, user_id, expires_at, created_at, updated_at, deleted_at, click_count, is_custom
+		SELECT id, code, long_url, user_id, workspace_id, expires_at, created_at, updated_at, deleted_at, click_count, is_custom
 		FROM   links
 		WHERE  code = $1
 		AND    deleted_at IS NULL`
 
 	link := &model.Link{}
 	err := r.pool.QueryRow(ctx, query, code).Scan(
-		&link.ID, &link.Code, &link.LongURL, &link.UserID,
+		&link.ID, &link.Code, &link.LongURL, &link.UserID, &link.WorkspaceID,
 		&link.ExpiresAt, &link.CreatedAt, &link.UpdatedAt,
 		&link.DeletedAt, &link.ClickCount, &link.IsCustom,
 	)
@@ -200,13 +203,13 @@ func (r *LinkRepository) GetByID(ctx context.Context, id uuid.UUID, userID uuid.
 	}
 
 	query := `
-		SELECT id, code, long_url, user_id, expires_at, created_at, updated_at, deleted_at, click_count, is_custom
+		SELECT id, code, long_url, user_id, workspace_id, expires_at, created_at, updated_at, deleted_at, click_count, is_custom
 		FROM   links
 		WHERE  id = $1 AND user_id = $2`
 
 	link := &model.Link{}
 	err := r.pool.QueryRow(ctx, query, id, userID).Scan(
-		&link.ID, &link.Code, &link.LongURL, &link.UserID,
+		&link.ID, &link.Code, &link.LongURL, &link.UserID, &link.WorkspaceID,
 		&link.ExpiresAt, &link.CreatedAt, &link.UpdatedAt,
 		&link.DeletedAt, &link.ClickCount, &link.IsCustom,
 	)
@@ -255,7 +258,7 @@ func (r *LinkRepository) ListByUser(ctx context.Context, userID uuid.UUID, limit
 	}
 
 	listQuery := fmt.Sprintf(`
-		SELECT id, code, long_url, user_id, expires_at, created_at, updated_at, deleted_at, click_count, is_custom
+		SELECT id, code, long_url, user_id, workspace_id, expires_at, created_at, updated_at, deleted_at, click_count, is_custom
 		FROM   links
 		%s
 		ORDER BY created_at DESC
@@ -272,7 +275,7 @@ func (r *LinkRepository) ListByUser(ctx context.Context, userID uuid.UUID, limit
 	for rows.Next() {
 		link := &model.Link{}
 		if err := rows.Scan(
-			&link.ID, &link.Code, &link.LongURL, &link.UserID,
+			&link.ID, &link.Code, &link.LongURL, &link.UserID, &link.WorkspaceID,
 			&link.ExpiresAt, &link.CreatedAt, &link.UpdatedAt,
 			&link.DeletedAt, &link.ClickCount, &link.IsCustom,
 		); err != nil {
@@ -281,6 +284,140 @@ func (r *LinkRepository) ListByUser(ctx context.Context, userID uuid.UUID, limit
 		links = append(links, link)
 	}
 	return links, total, nil
+}
+
+// ListByWorkspace returns paginated links for an anonymous workspace, newest first.
+func (r *LinkRepository) ListByWorkspace(ctx context.Context, workspaceID uuid.UUID, limit, offset int, search string) ([]*model.Link, int, error) {
+	if r.pool == nil {
+		ensureMemLinks()
+		memLinksMu.RLock()
+		defer memLinksMu.RUnlock()
+		var res []*model.Link
+		for _, l := range memLinks {
+			if l.DeletedAt == nil && l.WorkspaceID != nil && *l.WorkspaceID == workspaceID {
+				if search == "" || strings.Contains(strings.ToLower(l.LongURL), strings.ToLower(search)) || strings.Contains(strings.ToLower(l.Code), strings.ToLower(search)) {
+					copy := *l
+					res = append(res, &copy)
+				}
+			}
+		}
+		return res, len(res), nil
+	}
+
+	baseWhere := `WHERE workspace_id = $1 AND deleted_at IS NULL`
+	args := []any{workspaceID}
+	argIdx := 2
+
+	if search != "" {
+		baseWhere += fmt.Sprintf(` AND (long_url ILIKE $%d OR code ILIKE $%d)`, argIdx, argIdx+1)
+		pattern := "%" + search + "%"
+		args = append(args, pattern, pattern)
+		argIdx += 2
+	}
+
+	countQuery := `SELECT COUNT(*) FROM links ` + baseWhere
+	var total int
+	if err := r.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count workspace links: %w", err)
+	}
+
+	listQuery := fmt.Sprintf(`
+		SELECT id, code, long_url, user_id, workspace_id, expires_at, created_at, updated_at, deleted_at, click_count, is_custom
+		FROM   links
+		%s
+		ORDER BY created_at DESC
+		LIMIT $%d OFFSET $%d`, baseWhere, argIdx, argIdx+1)
+	args = append(args, limit, offset)
+
+	rows, err := r.pool.Query(ctx, listQuery, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list workspace links: %w", err)
+	}
+	defer rows.Close()
+
+	var links []*model.Link
+	for rows.Next() {
+		link := &model.Link{}
+		if err := rows.Scan(
+			&link.ID, &link.Code, &link.LongURL, &link.UserID, &link.WorkspaceID,
+			&link.ExpiresAt, &link.CreatedAt, &link.UpdatedAt,
+			&link.DeletedAt, &link.ClickCount, &link.IsCustom,
+		); err != nil {
+			return nil, 0, fmt.Errorf("scan workspace link row: %w", err)
+		}
+		links = append(links, link)
+	}
+	return links, total, nil
+}
+
+// GetByIDAndWorkspace fetches a link ensuring it belongs to the given workspace.
+func (r *LinkRepository) GetByIDAndWorkspace(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID) (*model.Link, error) {
+	if r.pool == nil {
+		ensureMemLinks()
+		memLinksMu.RLock()
+		defer memLinksMu.RUnlock()
+		for _, l := range memLinks {
+			if l.ID == id && l.DeletedAt == nil && l.WorkspaceID != nil && *l.WorkspaceID == workspaceID {
+				copy := *l
+				return &copy, nil
+			}
+		}
+		return nil, ErrNotFound
+	}
+
+	query := `
+		SELECT id, code, long_url, user_id, workspace_id, expires_at, created_at, updated_at, deleted_at, click_count, is_custom
+		FROM   links
+		WHERE  id = $1 AND workspace_id = $2 AND deleted_at IS NULL`
+
+	link := &model.Link{}
+	err := r.pool.QueryRow(ctx, query, id, workspaceID).Scan(
+		&link.ID, &link.Code, &link.LongURL, &link.UserID, &link.WorkspaceID,
+		&link.ExpiresAt, &link.CreatedAt, &link.UpdatedAt,
+		&link.DeletedAt, &link.ClickCount, &link.IsCustom,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get link by id and workspace: %w", err)
+	}
+	return link, nil
+}
+
+// GetByCodeAndWorkspace fetches a link ensuring it belongs to the given workspace.
+func (r *LinkRepository) GetByCodeAndWorkspace(ctx context.Context, code string, workspaceID uuid.UUID) (*model.Link, error) {
+	if r.pool == nil {
+		ensureMemLinks()
+		memLinksMu.RLock()
+		defer memLinksMu.RUnlock()
+		for _, l := range memLinks {
+			if l.Code == code && l.DeletedAt == nil && l.WorkspaceID != nil && *l.WorkspaceID == workspaceID {
+				copy := *l
+				return &copy, nil
+			}
+		}
+		return nil, ErrNotFound
+	}
+
+	query := `
+		SELECT id, code, long_url, user_id, workspace_id, expires_at, created_at, updated_at, deleted_at, click_count, is_custom
+		FROM   links
+		WHERE  code = $1 AND workspace_id = $2 AND deleted_at IS NULL`
+
+	link := &model.Link{}
+	err := r.pool.QueryRow(ctx, query, code, workspaceID).Scan(
+		&link.ID, &link.Code, &link.LongURL, &link.UserID, &link.WorkspaceID,
+		&link.ExpiresAt, &link.CreatedAt, &link.UpdatedAt,
+		&link.DeletedAt, &link.ClickCount, &link.IsCustom,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get link by code and workspace: %w", err)
+	}
+	return link, nil
 }
 
 // ListAll returns all active links for public overview.
@@ -302,7 +439,7 @@ func (r *LinkRepository) ListAll(ctx context.Context, limit, offset int, search 
 	}
 
 	query := `
-		SELECT id, code, long_url, user_id, expires_at, created_at, updated_at, deleted_at, click_count, is_custom
+		SELECT id, code, long_url, user_id, workspace_id, expires_at, created_at, updated_at, deleted_at, click_count, is_custom
 		FROM   links
 		WHERE  deleted_at IS NULL
 		ORDER  BY created_at DESC
@@ -318,7 +455,7 @@ func (r *LinkRepository) ListAll(ctx context.Context, limit, offset int, search 
 	for rows.Next() {
 		link := &model.Link{}
 		if err := rows.Scan(
-			&link.ID, &link.Code, &link.LongURL, &link.UserID,
+			&link.ID, &link.Code, &link.LongURL, &link.UserID, &link.WorkspaceID,
 			&link.ExpiresAt, &link.CreatedAt, &link.UpdatedAt,
 			&link.DeletedAt, &link.ClickCount, &link.IsCustom,
 		); err != nil {
@@ -362,6 +499,38 @@ func (r *LinkRepository) UpdateExpiry(ctx context.Context, id uuid.UUID, userID 
 	return code, nil
 }
 
+// UpdateExpiryByWorkspace allows changing the expiry time of a link belonging to a workspace.
+func (r *LinkRepository) UpdateExpiryByWorkspace(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID, expiresAt *time.Time) (string, error) {
+	if r.pool == nil {
+		ensureMemLinks()
+		memLinksMu.Lock()
+		defer memLinksMu.Unlock()
+		for _, l := range memLinks {
+			if l.ID == id && l.WorkspaceID != nil && *l.WorkspaceID == workspaceID {
+				l.ExpiresAt = expiresAt
+				l.UpdatedAt = time.Now()
+				return l.Code, nil
+			}
+		}
+		return "", ErrNotFound
+	}
+
+	query := `
+		UPDATE links SET expires_at = $1, updated_at = NOW()
+		WHERE id = $2 AND workspace_id = $3 AND deleted_at IS NULL
+		RETURNING code`
+
+	var code string
+	err := r.pool.QueryRow(ctx, query, expiresAt, id, workspaceID).Scan(&code)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("update expiry: %w", err)
+	}
+	return code, nil
+}
+
 // SoftDelete marks a link as deleted and returns its short code.
 func (r *LinkRepository) SoftDelete(ctx context.Context, id uuid.UUID, userID uuid.UUID) (string, error) {
 	if r.pool == nil {
@@ -391,6 +560,39 @@ func (r *LinkRepository) SoftDelete(ctx context.Context, id uuid.UUID, userID uu
 	}
 	if err != nil {
 		return "", fmt.Errorf("soft delete link: %w", err)
+	}
+	return code, nil
+}
+
+// SoftDeleteByWorkspace marks a link belonging to a workspace as deleted and returns its short code.
+func (r *LinkRepository) SoftDeleteByWorkspace(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID) (string, error) {
+	if r.pool == nil {
+		ensureMemLinks()
+		memLinksMu.Lock()
+		defer memLinksMu.Unlock()
+		for _, l := range memLinks {
+			if l.ID == id && l.WorkspaceID != nil && *l.WorkspaceID == workspaceID {
+				now := time.Now()
+				l.DeletedAt = &now
+				l.UpdatedAt = now
+				return l.Code, nil
+			}
+		}
+		return "", ErrNotFound
+	}
+
+	query := `
+		UPDATE links SET deleted_at = NOW(), updated_at = NOW()
+		WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
+		RETURNING code`
+
+	var code string
+	err := r.pool.QueryRow(ctx, query, id, workspaceID).Scan(&code)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("soft delete link by workspace: %w", err)
 	}
 	return code, nil
 }

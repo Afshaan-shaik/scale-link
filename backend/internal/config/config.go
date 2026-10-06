@@ -68,6 +68,10 @@ type Config struct {
 	// Seed
 	SeedUserEmail    string
 	SeedUserPassword string
+
+	// Anonymous Sessions & Workspaces
+	SessionInactivityDays   int
+	TransferTokenTTLMinutes int
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -120,6 +124,9 @@ func Load() (*Config, error) {
 
 		SeedUserEmail:    getEnv("SEED_USER_EMAIL", "demo@scalelink.dev"),
 		SeedUserPassword: getEnv("SEED_USER_PASSWORD", "Demo1234!"),
+
+		SessionInactivityDays:   getInt("SESSION_INACTIVITY_DAYS", 90),
+		TransferTokenTTLMinutes: getInt("TRANSFER_TOKEN_TTL_MINUTES", 10),
 	}
 
 	// ── Support cloud connection strings (Neon, Supabase, Vercel Postgres) ────

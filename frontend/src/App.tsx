@@ -15,8 +15,16 @@ import {
   saveStoredLinks, 
   loadStoredStats, 
   saveStoredStats, 
-  recordLinkClick 
+  recordLinkClick,
+  fetchWorkspaceLinks,
+  deleteWorkspaceLink
 } from './api';
+import { 
+  bootstrapSession,
+  startNewWorkspace,
+  sessionFetch
+} from './session';
+import { TransferWorkspaceModal } from './components/TransferWorkspaceModal';
 import { 
   Zap, 
   AlertTriangle, 
@@ -234,8 +242,10 @@ const RedirectHandler: React.FC<{ code: string; fallbackUrl?: string }> = ({ cod
 // ── Main Dashboard Application ───────────────────────────────────────────────
 const DashboardApp: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('shorten');
+  const [workspaceId, setWorkspaceId] = useState<string>('');
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState<boolean>(false);
   
-  // Persistent links inventory loaded from localStorage
+  // Tab-scoped saved URLs inventory
   const [links, setLinks] = useState<Link[]>(loadStoredLinks);
   
   const [selectedCode, setSelectedCode] = useState<string>(() => {
@@ -260,71 +270,53 @@ const DashboardApp: React.FC = () => {
     timestamp: new Date().toISOString(),
   });
 
-  // Real-time synchronization: sync clicks and links across tabs and background requests
+  // Session Bootstrap & Initial Workspace Load
   useEffect(() => {
-    const syncTelemetry = async () => {
+    let mounted = true;
+    bootstrapSession().then((sess) => {
+      if (!mounted) return;
+      setWorkspaceId(sess.workspaceId);
+      fetchWorkspaceLinks().then((wsLinks) => {
+        if (!mounted) return;
+        setLinks(wsLinks);
+        if (wsLinks.length > 0) {
+          setSelectedCode(wsLinks[0].code);
+        }
+      });
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Periodic sync for this tab's workspace (strictly isolated)
+  useEffect(() => {
+    const syncWorkspace = async () => {
       try {
-        const res = await fetch('/api/links');
+        const res = await sessionFetch('/api/links');
         if (res.ok) {
           const data = await res.json();
-          if (data && Array.isArray(data.links) && data.links.length > 0) {
-            setLinks((prevLinks) => {
-              const prevMap = new Map(prevLinks.map((l) => [l.code, l]));
-              data.links.forEach((serverLink: Link) => {
-                const local = prevMap.get(serverLink.code);
-                if (local) {
-                  local.click_count = Math.max(local.click_count || 0, serverLink.click_count || 0);
-                } else {
-                  prevMap.set(serverLink.code, serverLink);
-                }
-              });
-              const merged = Array.from(prevMap.values());
-              saveStoredLinks(merged);
-              return merged;
-            });
+          if (data && Array.isArray(data.links)) {
+            setLinks(data.links);
+            saveStoredLinks(data.links);
           }
         }
       } catch {}
-
-      // Also refresh from localStorage
-      const currentStored = loadStoredLinks();
-      setLinks((prev) => {
-        const hasDiff = currentStored.some((s) => {
-          const p = prev.find((x) => x.code === s.code);
-          return !p || p.click_count !== s.click_count;
-        });
-        return hasDiff ? currentStored : prev;
-      });
-      setStatsMap(loadStoredStats());
-
-      // Sync local links to backend serverless container
-      fetch('/api/links/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ links: currentStored }),
-      }).catch(() => {});
     };
 
-    // Initial sync
-    syncTelemetry();
-
-    // Poll every 3 seconds for real-time click requests across all users
-    const pollInterval = setInterval(syncTelemetry, 3000);
-
-    // Sync immediately when window regains focus (e.g. user returns from opened link tab)
-    const handleFocus = () => syncTelemetry();
+    const interval = setInterval(syncWorkspace, 3000);
+    const handleFocus = () => syncWorkspace();
     window.addEventListener('focus', handleFocus);
-    window.addEventListener('storage', handleFocus);
 
     return () => {
-      clearInterval(pollInterval);
+      clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('storage', handleFocus);
     };
   }, []);
 
   const handleLinkClick = (code: string) => {
-    // 1. Immediately reload stored links and stats from localStorage
+    // 1. Immediately reload stored links and stats for this tab
     const updated = loadStoredLinks();
     setLinks(updated);
     setStatsMap(loadStoredStats());
@@ -340,7 +332,7 @@ const DashboardApp: React.FC = () => {
   };
 
   const handleLinkCreated = (newLink: Link) => {
-    // Add to inventory and save to persistent storage
+    // Add to this tab's workspace inventory
     const updated = [newLink, ...links.filter((l) => l.code !== newLink.code)];
     setLinks(updated);
     saveStoredLinks(updated);
@@ -354,8 +346,8 @@ const DashboardApp: React.FC = () => {
       timestamp: new Date().toISOString(),
     });
 
-    // Also sync all links to backend serverless container
-    fetch('/api/links/sync', {
+    // Also sync to serverless container
+    sessionFetch('/api/links/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ links: updated }),
@@ -378,15 +370,25 @@ const DashboardApp: React.FC = () => {
   };
 
   const handleDeleteLink = (id: string) => {
+    deleteWorkspaceLink(id);
     const updated = links.filter((l) => l.id !== id);
     setLinks(updated);
     saveStoredLinks(updated);
   };
 
+  const handleStartNewWorkspace = async () => {
+    if (window.confirm('Start a fresh anonymous workspace for this tab? You will receive a clean workspace.')) {
+      const newSess = await startNewWorkspace();
+      setWorkspaceId(newSess.workspaceId);
+      setLinks([]);
+      saveStoredLinks([]);
+      setSelectedCode('');
+    }
+  };
+
   const handleViewStats = (code: string) => {
     setSelectedCode(code);
     setActiveTab('analytics');
-    // Refresh stats from storage
     setStatsMap(loadStoredStats());
   };
 
@@ -412,6 +414,9 @@ const DashboardApp: React.FC = () => {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         linksCount={links.length}
+        workspaceId={workspaceId}
+        onTransferWorkspace={() => setIsTransferModalOpen(true)}
+        onStartNewWorkspace={handleStartNewWorkspace}
       />
 
       {urlNotice && (
@@ -468,6 +473,9 @@ const DashboardApp: React.FC = () => {
                 onViewStats={handleViewStats}
                 onNavigateToCreate={() => setActiveTab('shorten')}
                 onLinkClick={handleLinkClick}
+                workspaceId={workspaceId}
+                onTransferWorkspace={() => setIsTransferModalOpen(true)}
+                onStartNewWorkspace={handleStartNewWorkspace}
               />
             </div>
           </div>
@@ -481,6 +489,9 @@ const DashboardApp: React.FC = () => {
               onViewStats={handleViewStats}
               onNavigateToCreate={() => setActiveTab('shorten')}
               onLinkClick={handleLinkClick}
+              workspaceId={workspaceId}
+              onTransferWorkspace={() => setIsTransferModalOpen(true)}
+              onStartNewWorkspace={handleStartNewWorkspace}
             />
           </div>
         )}
@@ -520,6 +531,13 @@ const DashboardApp: React.FC = () => {
           </div>
         )}
       </main>
+
+      {/* Transfer Workspace Modal */}
+      <TransferWorkspaceModal
+        isOpen={isTransferModalOpen}
+        onClose={() => setIsTransferModalOpen(false)}
+        workspaceId={workspaceId}
+      />
 
       {/* Footer */}
       <footer className="border-t border-slate-900 bg-slate-950 py-6 mt-12 text-xs text-slate-500">

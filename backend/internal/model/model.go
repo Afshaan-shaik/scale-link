@@ -32,6 +32,63 @@ type APIKey struct {
 	RevokedAt *time.Time `json:"revoked_at,omitempty"`
 }
 
+// ── Workspace ────────────────────────────────────────────────────────────────
+
+// Workspace represents an isolated collection of links managed by one or more anonymous sessions.
+type Workspace struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Status    string    `json:"status"` // "active", "archived"
+}
+
+// ── Session ──────────────────────────────────────────────────────────────────
+
+// Session represents an anonymous browser session attached to a workspace.
+type Session struct {
+	ID          uuid.UUID  `json:"id"`
+	WorkspaceID uuid.UUID  `json:"workspace_id"`
+	TokenHash   string     `json:"-"` // SHA-256 hex string of 256-bit token
+	CreatedAt   time.Time  `json:"created_at"`
+	LastSeenAt  time.Time  `json:"last_seen_at"`
+	ExpiresAt   time.Time  `json:"expires_at"`
+	RevokedAt   *time.Time `json:"revoked_at,omitempty"`
+	Status      string     `json:"status"` // "active", "revoked", "expired"
+}
+
+// IsValid reports whether the session is currently active and unexpired.
+func (s *Session) IsValid() bool {
+	return s.RevokedAt == nil && time.Now().Before(s.ExpiresAt) && s.Status == "active"
+}
+
+// IsExpired reports whether the session has passed its expiration time.
+func (s *Session) IsExpired() bool {
+	return time.Now().After(s.ExpiresAt)
+}
+
+// ── SessionTransfer ──────────────────────────────────────────────────────────
+
+// SessionTransfer represents a single-use high-entropy token to transfer a workspace.
+type SessionTransfer struct {
+	ID          uuid.UUID  `json:"id"`
+	WorkspaceID uuid.UUID  `json:"workspace_id"`
+	TokenHash   string     `json:"-"` // SHA-256 hex string
+	CreatedAt   time.Time  `json:"created_at"`
+	ExpiresAt   time.Time  `json:"expires_at"`
+	UsedAt      *time.Time `json:"used_at,omitempty"`
+	RevokedAt   *time.Time `json:"revoked_at,omitempty"`
+}
+
+// IsClaimable reports whether the transfer token is still valid to be claimed.
+func (t *SessionTransfer) IsClaimable() bool {
+	return t.UsedAt == nil && t.RevokedAt == nil && time.Now().Before(t.ExpiresAt)
+}
+
+// IsExpired reports whether the transfer token has expired.
+func (t *SessionTransfer) IsExpired() bool {
+	return time.Now().After(t.ExpiresAt)
+}
+
 // ── Link ──────────────────────────────────────────────────────────────────────
 
 // Link is the core domain entity representing a shortened URL.
@@ -40,6 +97,7 @@ type Link struct {
 	Code        string     `json:"code"`
 	LongURL     string     `json:"long_url"`
 	UserID      *uuid.UUID `json:"user_id,omitempty"`
+	WorkspaceID *uuid.UUID `json:"workspace_id,omitempty"`
 	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`

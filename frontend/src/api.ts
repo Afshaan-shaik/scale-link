@@ -1,3 +1,5 @@
+import { getSessionToken, sessionFetch, getWorkspaceId } from './session';
+
 export interface Link {
   id: string;
   code: string;
@@ -56,7 +58,7 @@ export interface HealthStatus {
   cache_hit_ratio?: number;
 }
 
-// Clean seed data: exactly 1 high-scale example link for first-time visitors
+// Clean demo example link for first-time visitors when workspace is brand new
 export const INITIAL_LINKS: Link[] = [
   {
     id: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
@@ -103,59 +105,85 @@ export const INITIAL_STATS: Record<string, LinkStats> = {
   },
 };
 
-// Local storage token helper
-export function getToken(): string | null {
-  return localStorage.getItem("scalelink_token");
-}
-
-export function setToken(token: string) {
-  localStorage.setItem("scalelink_token", token);
-}
-
-export function clearToken() {
-  localStorage.removeItem("scalelink_token");
-}
-
-// ── Persistent Link & Analytics Storage ──────────────────────────────────────
-const LINKS_KEY = "scalelink_stored_links_v2";
-const STATS_KEY = "scalelink_stored_stats_v2";
+// ── Tab-Scoped Temporary Cache (sessionStorage only, NEVER shared across tabs via localStorage) ──
+const TAB_LINKS_KEY = 'scalelink_tab_links_cache';
+const TAB_STATS_KEY = 'scalelink_tab_stats_cache';
 
 export function loadStoredLinks(): Link[] {
   try {
-    const raw = localStorage.getItem(LINKS_KEY);
+    const raw = sessionStorage.getItem(TAB_LINKS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     }
   } catch {}
-  // Default to INITIAL_LINKS on first load (1 clean example link)
-  saveStoredLinks(INITIAL_LINKS);
-  return INITIAL_LINKS;
+  return [];
 }
 
 export function saveStoredLinks(links: Link[]) {
   try {
-    localStorage.setItem(LINKS_KEY, JSON.stringify(links));
+    sessionStorage.setItem(TAB_LINKS_KEY, JSON.stringify(links));
   } catch {}
 }
 
 export function loadStoredStats(): Record<string, LinkStats> {
   try {
-    const raw = localStorage.getItem(STATS_KEY);
+    const raw = sessionStorage.getItem(TAB_STATS_KEY);
     if (raw) {
       return JSON.parse(raw);
     }
   } catch {}
-  saveStoredStats(INITIAL_STATS);
   return INITIAL_STATS;
 }
 
 export function saveStoredStats(stats: Record<string, LinkStats>) {
   try {
-    localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+    sessionStorage.setItem(TAB_STATS_KEY, JSON.stringify(stats));
   } catch {}
+}
+
+/**
+ * Fetch Saved URLs for the current anonymous session's workspace from the server.
+ */
+export async function fetchWorkspaceLinks(): Promise<Link[]> {
+  try {
+    const res = await sessionFetch('/api/links');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.links)) {
+        saveStoredLinks(data.links);
+        return data.links;
+      }
+    }
+  } catch {}
+  return loadStoredLinks();
+}
+
+/**
+ * Soft delete a link belonging to this workspace.
+ */
+export async function deleteWorkspaceLink(id: string): Promise<boolean> {
+  try {
+    const res = await sessionFetch(`/api/links/${id}`, { method: 'DELETE' });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fetch owner stats for a link belonging to this workspace.
+ */
+export async function fetchLinkStats(code: string): Promise<LinkStats | null> {
+  try {
+    const res = await sessionFetch(`/api/links/${encodeURIComponent(code)}/stats`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch {}
+  return null;
 }
 
 export function recordLinkClick(code: string): { link?: Link; redirected: boolean; expired: boolean } {
@@ -195,7 +223,7 @@ export function recordLinkClick(code: string): { link?: Link; redirected: boolea
   }
 
   const ua = navigator.userAgent.toLowerCase();
-  const deviceType = ua.includes("mobi") ? "mobile" : ua.includes("ipad") || ua.includes("tablet") ? "tablet" : "desktop";
+  const deviceType = ua.includes("mobile") ? "mobile" : ua.includes("ipad") || ua.includes("tablet") ? "tablet" : "desktop";
   const devEntry = currentStat.devices.find((d) => d.device_type === deviceType);
   if (devEntry) devEntry.count += 1;
   else currentStat.devices.push({ device_type: deviceType, count: 1 });
@@ -205,4 +233,3 @@ export function recordLinkClick(code: string): { link?: Link; redirected: boolea
 
   return { link, redirected: true, expired: false };
 }
-

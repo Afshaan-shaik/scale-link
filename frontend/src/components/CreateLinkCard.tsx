@@ -15,6 +15,7 @@ import {
   Share2
 } from 'lucide-react';
 import { Link, recordLinkClick } from '../api';
+import { sessionFetch } from '../session';
 
 interface CreateLinkCardProps {
   onLinkCreated: (link: Link) => void;
@@ -62,6 +63,17 @@ export const CreateLinkCard: React.FC<CreateLinkCardProps> = ({ onLinkCreated, o
       return;
     }
 
+    const lower = cleanUrl.toLowerCase();
+    if (
+      lower.startsWith('javascript:') || 
+      lower.startsWith('data:') || 
+      lower.startsWith('file:') || 
+      lower.startsWith('vbscript:')
+    ) {
+      setError('Invalid URL protocol. Only http:// and https:// URLs are allowed.');
+      return;
+    }
+
     if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
       cleanUrl = 'https://' + cleanUrl;
     }
@@ -83,8 +95,8 @@ export const CreateLinkCard: React.FC<CreateLinkCardProps> = ({ onLinkCreated, o
       else if (expiryOption === '7d') expiresAt = new Date(now + 7 * 86400000).toISOString();
       else if (expiryOption === '30d') expiresAt = new Date(now + 30 * 86400000).toISOString();
 
-      // Attempt live POST /api/links
-      const res = await fetch('/api/links', {
+      // Attempt live POST /api/links with session authentication
+      const res = await sessionFetch('/api/links', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -109,7 +121,7 @@ export const CreateLinkCard: React.FC<CreateLinkCardProps> = ({ onLinkCreated, o
         };
         setCreatedLink(newLink);
         onLinkCreated(newLink);
-        fetch('/api/links/sync', {
+        sessionFetch('/api/links/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ links: [newLink] }),
@@ -139,7 +151,7 @@ export const CreateLinkCard: React.FC<CreateLinkCardProps> = ({ onLinkCreated, o
           };
           setCreatedLink(newLink);
           onLinkCreated(newLink);
-          fetch('/api/links/sync', {
+          sessionFetch('/api/links/sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ links: [newLink] }),

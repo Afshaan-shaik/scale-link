@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
+import { WorkspaceBar } from './components/WorkspaceBar';
 import { RequestPathStrip } from './components/RequestPathStrip';
 import { CreateLinkCard } from './components/CreateLinkCard';
 import { MyLinksTable } from './components/MyLinksTable';
@@ -409,12 +410,17 @@ const DashboardApp: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      {/* Navigation Header */}
+      {/* Navigation Header - Spacious & Clean */}
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         linksCount={links.length}
+      />
+
+      {/* Anonymous Workspace Bar - Down from the header with ample breathing room */}
+      <WorkspaceBar
         workspaceId={workspaceId}
+        linksCount={links.length}
         onTransferWorkspace={() => setIsTransferModalOpen(true)}
         onStartNewWorkspace={handleStartNewWorkspace}
       />

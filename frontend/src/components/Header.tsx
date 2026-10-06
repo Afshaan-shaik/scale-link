@@ -1,3 +1,4 @@
+import React from 'react';
 import { 
   Link2, 
   BarChart3, 
@@ -5,28 +6,19 @@ import {
   Server, 
   Zap, 
   ListFilter,
-  ShieldCheck,
-  Activity,
-  Share2,
-  Plus
+  Activity
 } from 'lucide-react';
 
 interface HeaderProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   linksCount: number;
-  workspaceId?: string;
-  onTransferWorkspace?: () => void;
-  onStartNewWorkspace?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ 
   activeTab, 
   setActiveTab, 
   linksCount,
-  workspaceId,
-  onTransferWorkspace,
-  onStartNewWorkspace
 }) => {
   const tabs = [
     { id: 'shorten', label: 'Shorten', icon: Link2 },
@@ -47,24 +39,26 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo & Tagline */}
-          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('shorten')}>
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+          {/* Logo & Tagline - Spacious and clean */}
+          <div 
+            className="flex items-center space-x-3.5 cursor-pointer py-1 select-none" 
+            onClick={() => setActiveTab('shorten')}
+          >
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
               <Link2 className="w-6 h-6 text-slate-950 font-bold stroke-[2.5]" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="font-extrabold text-xl tracking-tight text-white">Scale<span className="text-emerald-400">Link</span></span>
-                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  100M Scale
+                <span className="font-extrabold text-xl tracking-tight text-white">
+                  Scale<span className="text-emerald-400">Link</span>
                 </span>
               </div>
               <p className="text-xs text-slate-400 hidden sm:block">Production URL Shortener & Click Analytics</p>
             </div>
           </div>
 
-          {/* Navigation Tabs */}
-          <nav className="hidden md:flex space-x-1">
+          {/* Navigation Tabs - Generous spacing & breathing room */}
+          <nav className="hidden md:flex items-center space-x-1.5 lg:space-x-2">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -90,50 +84,14 @@ export const Header: React.FC<HeaderProps> = ({
             })}
           </nav>
 
-          {/* Workspace & Status Controls */}
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            {/* Anonymous Workspace Indicator */}
-            {workspaceId && (
-              <div 
-                className="hidden lg:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs font-mono text-emerald-300"
-                title={`Anonymous Workspace ID: ${workspaceId}`}
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>ws:{workspaceId.slice(0, 6)}</span>
-              </div>
-            )}
-
-            {/* Transfer Workspace Action */}
-            {onTransferWorkspace && (
-              <button
-                onClick={onTransferWorkspace}
-                className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-750 text-slate-200 hover:text-white text-xs font-semibold border border-slate-700/80 shadow-sm transition-all active:scale-95"
-                title="Transfer this workspace to mobile or another browser via one-time link or QR code"
-              >
-                <Share2 className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="hidden sm:inline">Transfer</span>
-              </button>
-            )}
-
-            {/* Start New Workspace Action */}
-            {onStartNewWorkspace && (
-              <button
-                onClick={onStartNewWorkspace}
-                className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800/60 hover:bg-slate-700/80 text-slate-300 hover:text-white text-xs font-semibold border border-slate-750 transition-all active:scale-95"
-                title="Start a fresh anonymous workspace for this tab"
-              >
-                <Plus className="w-3.5 h-3.5 text-slate-400" />
-                <span className="hidden sm:inline">New</span>
-              </button>
-            )}
-
-            {/* Host Badge */}
-            <div className="flex items-center space-x-2 px-2.5 py-1.5 rounded-full bg-slate-850 border border-slate-700/60 text-xs">
+          {/* Status Badge - Spacious & Uncrowded */}
+          <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-slate-850 border border-slate-700/60 text-xs">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
-              <span className="text-slate-300 font-mono text-[11px] sm:text-xs">{productionHost}</span>
+              <span className="text-slate-300 font-mono text-xs">{productionHost}</span>
             </div>
           </div>
         </div>

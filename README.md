@@ -2,9 +2,13 @@
 
 > High-throughput, production-grade URL shortener with asynchronous click analytics, sub-millisecond Redis caching, atomic token-bucket rate limiting, and real-time observability. Engineered for interview-grade systems design depth.
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/scalelink/scalelink)](https://github.com/scalelink/scalelink)
+[![GitHub Repo](https://img.shields.io/badge/GitHub-Afshaan--shaik%2Fscale--link-blue?logo=github)](https://github.com/Afshaan-shaik/scale-link)
 [![Docker Compose](https://img.shields.io/badge/docker--compose-v2.20+-blue.svg)](docker-compose.yml)
+[![Terraform IaC](https://img.shields.io/badge/IaC-Terraform%20AWS-orange.svg)](infra/terraform/)
+[![Architecture & Pitch Guide PDF](https://img.shields.io/badge/Guide-Architecture%20%26%20Pitch%20PDF-success.svg)](docs/ScaleLink_Beginners_Guide_and_Pitch.pdf)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+> 📘 **Architectural Guide & Pitch:** See the [Beginner Developer's Engineering Guide & Project Pitch](docs/BEGINNER_GUIDE_AND_PITCH.md) or download the formatted [PDF Guide](docs/ScaleLink_Beginners_Guide_and_Pitch.pdf).
 
 ---
 
@@ -60,8 +64,8 @@ flowchart TD
 ### 1. Launch Environment
 ```bash
 # Clone the repository
-git clone https://github.com/scalelink/scalelink.git
-cd scalelink
+git clone https://github.com/Afshaan-shaik/scale-link.git
+cd scale-link
 
 # Copy sample environment configuration
 cp .env.example .env
